@@ -15,17 +15,21 @@ function toPositiveInteger(value: unknown) {
   return Number.isInteger(numberValue) ? numberValue : NaN;
 }
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Request failed";
+}
+
 export class CartController {
-  async getCart(req: Request, res: Response, next: NextFunction) {
+  async getCart(req: Request, res: Response, _next: NextFunction) {
     try {
       const cart = await cartService.getCart(getCartContext(req));
       return res.json({ cart });
     } catch (error) {
-      next(error);
+      return res.status(400).json({ message: getErrorMessage(error) });
     }
   }
 
-  async addItem(req: Request, res: Response, next: NextFunction) {
+  async addItem(req: Request, res: Response, _next: NextFunction) {
     try {
       const cart = await cartService.addItem(getCartContext(req), {
         productId: toPositiveInteger(req.body.productId),
@@ -34,11 +38,11 @@ export class CartController {
 
       return res.status(201).json({ cart });
     } catch (error) {
-      next(error);
+      return res.status(400).json({ message: getErrorMessage(error) });
     }
   }
 
-  async updateItem(req: Request, res: Response, next: NextFunction) {
+  async updateItem(req: Request, res: Response, _next: NextFunction) {
     try {
       const cart = await cartService.updateItem(getCartContext(req), {
         productId: toPositiveInteger(req.params.productId),
@@ -47,11 +51,11 @@ export class CartController {
 
       return res.json({ cart });
     } catch (error) {
-      next(error);
+      return res.status(400).json({ message: getErrorMessage(error) });
     }
   }
 
-  async removeItem(req: Request, res: Response, next: NextFunction) {
+  async removeItem(req: Request, res: Response, _next: NextFunction) {
     try {
       const cart = await cartService.removeItem(
         getCartContext(req),
@@ -60,7 +64,7 @@ export class CartController {
 
       return res.json({ cart });
     } catch (error) {
-      next(error);
+      return res.status(400).json({ message: getErrorMessage(error) });
     }
   }
 }

@@ -1,9 +1,6 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { InteractionService } from "./interaction.service.js";
-function createHttpError(message, statusCode) {
-    return Object.assign(new Error(message), { statusCode });
-}
 export class OrderService {
     interactionService = new InteractionService();
     async checkout(input) {
@@ -19,13 +16,15 @@ export class OrderService {
                 },
             });
             if (!cart || cart.items.length === 0) {
-                throw createHttpError("Cart is empty", 400);
+                throw new Error("Cart is empty");
             }
             const orderTotal = cart.items.reduce((sum, item) => sum.plus(item.product.price.mul(item.quantity)), new Prisma.Decimal(0));
             const order = await tx.order.create({
                 data: {
                     userId: input.userId,
                     total: orderTotal,
+                    paymentMethod: "COD",
+                    paymentStatus: "PENDING",
                 },
             });
             const orderItems = [];
@@ -41,7 +40,7 @@ export class OrderService {
                     take: cartItem.quantity,
                 });
                 if (availableInventory.length !== cartItem.quantity) {
-                    throw createHttpError(`Not enough available serials for product ${cartItem.productId}`, 409);
+                    throw new Error(`Not enough available serials for product ${cartItem.productId}`);
                 }
                 const orderItemTotal = cartItem.product.price.mul(cartItem.quantity);
                 const orderItem = await tx.orderItem.create({
@@ -67,7 +66,7 @@ export class OrderService {
                     },
                 });
                 if (updateResult.count !== cartItem.quantity) {
-                    throw createHttpError(`Unable to reserve exact serial quantity for product ${cartItem.productId}`, 409);
+                    throw new Error(`Unable to reserve exact serial quantity for product ${cartItem.productId}`);
                 }
                 orderItems.push(orderItem);
                 await this.interactionService.recordWithClient(tx, {
@@ -93,5 +92,44 @@ export class OrderService {
                 },
             });
         });
+    }
+    async getHistory(input) {
+        const skip = (input.page - 1) * input.limit;
+        const where = {
+            userId: input.userId,
+        };
+        const [total, orders] = await Promise.all([
+            prisma.order.count({ where }),
+            prisma.order.findMany({
+                where,
+                skip,
+                take: input.limit,
+                orderBy: {
+                    createdAt: "desc",
+                },
+                include: {
+                    items: {
+                        include: {
+                            product: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    price: true,
+                                    imageUrl: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            }),
+        ]);
+        return {
+            data: orders,
+            pagination: {
+                total,
+                page: input.page,
+                totalPages: Math.ceil(total / input.limit),
+            },
+        };
     }
 }

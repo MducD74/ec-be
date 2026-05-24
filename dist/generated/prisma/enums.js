@@ -22,3 +22,9 @@ export const InteractionType = {
     CART: 'CART',
     PURCHASE: 'PURCHASE'
 };
+export const PaymentMethod = {
+    COD: 'COD'
+};
+export const PaymentStatus = {
+    PENDING: 'PENDING'
+};

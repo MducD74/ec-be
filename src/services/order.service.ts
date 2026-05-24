@@ -6,8 +6,10 @@ export interface CheckoutInput {
   userId: number;
 }
 
-function createHttpError(message: string, statusCode: number) {
-  return Object.assign(new Error(message), { statusCode });
+export interface OrderHistoryInput {
+  userId: number;
+  page: number;
+  limit: number;
 }
 
 export class OrderService {
@@ -27,7 +29,7 @@ export class OrderService {
       });
 
       if (!cart || cart.items.length === 0) {
-        throw createHttpError("Cart is empty", 400);
+        throw new Error("Cart is empty");
       }
 
       const orderTotal = cart.items.reduce(
@@ -39,6 +41,8 @@ export class OrderService {
         data: {
           userId: input.userId,
           total: orderTotal,
+          paymentMethod: "COD",
+          paymentStatus: "PENDING",
         },
       });
 
@@ -57,10 +61,7 @@ export class OrderService {
         });
 
         if (availableInventory.length !== cartItem.quantity) {
-          throw createHttpError(
-            `Not enough available serials for product ${cartItem.productId}`,
-            409,
-          );
+          throw new Error(`Not enough available serials for product ${cartItem.productId}`);
         }
 
         const orderItemTotal = cartItem.product.price.mul(cartItem.quantity);
@@ -89,9 +90,8 @@ export class OrderService {
         });
 
         if (updateResult.count !== cartItem.quantity) {
-          throw createHttpError(
+          throw new Error(
             `Unable to reserve exact serial quantity for product ${cartItem.productId}`,
-            409,
           );
         }
 
@@ -122,5 +122,47 @@ export class OrderService {
         },
       });
     });
+  }
+
+  async getHistory(input: OrderHistoryInput) {
+    const skip = (input.page - 1) * input.limit;
+    const where = {
+      userId: input.userId,
+    };
+
+    const [total, orders] = await Promise.all([
+      prisma.order.count({ where }),
+      prisma.order.findMany({
+        where,
+        skip,
+        take: input.limit,
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          items: {
+            include: {
+              product: {
+                select: {
+                  id: true,
+                  name: true,
+                  price: true,
+                  imageUrl: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: orders,
+      pagination: {
+        total,
+        page: input.page,
+        totalPages: Math.ceil(total / input.limit),
+      },
+    };
   }
 }

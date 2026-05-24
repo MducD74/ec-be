@@ -3,6 +3,7 @@ import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import authRoutes from "./routes/auth.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
+import categoryRoutes from "./routes/category.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 
@@ -18,6 +19,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use(`${apiPrefix}/auth`, authRoutes);
+app.use(`${apiPrefix}/categories`, categoryRoutes);
 app.use(`${apiPrefix}/products`, productRoutes);
 app.use(`${apiPrefix}/cart`, cartRoutes);
 app.use(`${apiPrefix}/orders`, orderRoutes);

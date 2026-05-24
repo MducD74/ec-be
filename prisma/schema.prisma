@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 enum OrderStatus {
@@ -25,6 +25,14 @@ enum InteractionType {
   PURCHASE
 }
 
+enum PaymentMethod {
+  COD
+}
+
+enum PaymentStatus {
+  PENDING
+}
+
 model User {
   id           Int               @id @default(autoincrement())
   email        String            @unique
@@ -41,25 +49,44 @@ model Product {
   id           Int               @id @default(autoincrement())
   name         String
   description  String?
+  specifications Json?
   price        Decimal
   sku          String            @unique
+  imageUrl     String?
+  categoryId   Int?
+  category     Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   inventory    Inventory[]
   orderItems   OrderItem[]
   cartItems    CartItem[]
   interactions UserInteraction[]
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
+
+  @@index([categoryId])
+}
+
+model Category {
+  id       Int        @id @default(autoincrement())
+  name     String
+  parentId Int?
+  parent   Category? @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
 }
 
 model Order {
-  id        Int         @id @default(autoincrement())
-  userId    Int
-  total     Decimal
-  status    OrderStatus @default(PENDING)
-  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items     OrderItem[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  id            Int           @id @default(autoincrement())
+  userId        Int
+  total         Decimal
+  status        OrderStatus   @default(PENDING)
+  paymentMethod PaymentMethod @default(COD)
+  paymentStatus PaymentStatus @default(PENDING)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items         OrderItem[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   @@index([userId])
 }

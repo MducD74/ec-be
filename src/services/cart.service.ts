@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { JwtPayload, getJwtSecret } from "../middleware/auth.js";
 import { InteractionService } from "./interaction.service.js";
@@ -35,9 +36,7 @@ function getUserFromAuthorization(authorization?: string) {
 
 function assertPositiveInteger(value: number, fieldName: string) {
   if (!Number.isInteger(value) || value <= 0) {
-    throw Object.assign(new Error(`${fieldName} must be a positive integer`), {
-      statusCode: 400,
-    });
+    throw new Error(`${fieldName} must be a positive integer`);
   }
 }
 
@@ -45,125 +44,141 @@ export class CartService {
   private readonly interactionService = new InteractionService();
 
   async getCart(context: CartContext) {
-    const cart = await this.resolveCart(context);
-    return this.findCartById(cart.id);
+    return prisma.$transaction(async (tx) => {
+      const cart = await this.resolveCart(tx, context);
+      return this.findCartById(tx, cart.id);
+    });
   }
 
   async addItem(context: CartContext, input: CartItemInput) {
-    assertPositiveInteger(input.productId, "productId");
-    assertPositiveInteger(input.quantity, "quantity");
+    return prisma.$transaction(async (tx) => {
+      assertPositiveInteger(input.productId, "productId");
+      assertPositiveInteger(input.quantity, "quantity");
 
-    const cart = await this.resolveCart(context);
-    await this.assertProductExists(input.productId);
+      await this.assertProductExists(tx, input.productId);
+      const cart = await this.resolveCart(tx, context);
 
-    await prisma.cartItem.upsert({
-      where: {
-        cartId_productId: {
+      await tx.cartItem.upsert({
+        where: {
+          cartId_productId: {
+            cartId: cart.id,
+            productId: input.productId,
+          },
+        },
+        create: {
           cartId: cart.id,
           productId: input.productId,
+          quantity: input.quantity,
         },
-      },
-      create: {
-        cartId: cart.id,
+        update: {
+          quantity: {
+            increment: input.quantity,
+          },
+        },
+      });
+
+      await this.interactionService.recordWithClient(tx, {
+        authorization: context.authorization,
+        sessionId: context.sessionId,
         productId: input.productId,
-        quantity: input.quantity,
-      },
-      update: {
-        quantity: {
-          increment: input.quantity,
-        },
-      },
-    });
+        type: "CART",
+      });
 
-    await this.interactionService.record({
-      authorization: context.authorization,
-      sessionId: context.sessionId,
-      productId: input.productId,
-      type: "CART",
+      return this.findCartById(tx, cart.id);
     });
-
-    return this.findCartById(cart.id);
   }
 
   async updateItem(context: CartContext, input: CartItemInput) {
-    assertPositiveInteger(input.productId, "productId");
-    assertPositiveInteger(input.quantity, "quantity");
+    return prisma.$transaction(async (tx) => {
+      assertPositiveInteger(input.productId, "productId");
+      assertPositiveInteger(input.quantity, "quantity");
 
-    const cart = await this.resolveCart(context);
-    await this.assertProductExists(input.productId);
+      const cart = await this.resolveCart(tx, context);
+      await this.assertProductExists(tx, input.productId);
 
-    await prisma.cartItem.upsert({
-      where: {
-        cartId_productId: {
+      await tx.cartItem.upsert({
+        where: {
+          cartId_productId: {
+            cartId: cart.id,
+            productId: input.productId,
+          },
+        },
+        create: {
           cartId: cart.id,
           productId: input.productId,
+          quantity: input.quantity,
         },
-      },
-      create: {
-        cartId: cart.id,
-        productId: input.productId,
-        quantity: input.quantity,
-      },
-      update: {
-        quantity: input.quantity,
-      },
-    });
+        update: {
+          quantity: input.quantity,
+        },
+      });
 
-    return this.findCartById(cart.id);
+      return this.findCartById(tx, cart.id);
+    });
   }
 
   async removeItem(context: CartContext, productId: number) {
-    assertPositiveInteger(productId, "productId");
+    return prisma.$transaction(async (tx) => {
+      assertPositiveInteger(productId, "productId");
 
-    const cart = await this.resolveCart(context);
+      const cart = await this.resolveCart(tx, context);
 
-    await prisma.cartItem.deleteMany({
-      where: {
-        cartId: cart.id,
-        productId,
-      },
+      await tx.cartItem.deleteMany({
+        where: {
+          cartId: cart.id,
+          productId,
+        },
+      });
+
+      return this.findCartById(tx, cart.id);
     });
-
-    return this.findCartById(cart.id);
   }
 
-  private async resolveCart(context: CartContext) {
+  private async resolveCart(tx: Prisma.TransactionClient, context: CartContext) {
     const user = getUserFromAuthorization(context.authorization);
 
     if (user) {
-      const userCart = await this.getOrCreateUserCart(user.userId);
+      await this.assertUserExists(tx, user.userId);
+      const userCart = await this.getOrCreateUserCart(tx, user.userId);
 
       if (context.sessionId) {
-        await this.mergeGuestCartIntoUserCart(context.sessionId, userCart.id);
+        await this.mergeGuestCartIntoUserCart(tx, context.sessionId, userCart.id);
       }
 
       return userCart;
     }
 
     if (!context.sessionId) {
-      throw Object.assign(
-        new Error("x-session-id header or JWT token is required"),
-        { statusCode: 400 },
-      );
+      throw new Error("x-session-id header or JWT token is required");
     }
 
-    return prisma.cart.upsert({
+    return tx.cart.upsert({
       where: { sessionId: context.sessionId },
-      create: { sessionId: context.sessionId },
+      create: {
+        sessionId: context.sessionId,
+        userId: null,
+      },
       update: {},
     });
   }
 
-  private getOrCreateUserCart(userId: number) {
-    return prisma.cart.upsert({
+  private async getOrCreateUserCart(tx: Prisma.TransactionClient, userId: number) {
+    return tx.cart.upsert({
       where: { userId },
-      create: { userId },
+      create: {
+        userId,
+        sessionId: null,
+      },
       update: {},
     });
   }
 
-  private async mergeGuestCartIntoUserCart(sessionId: string, userCartId: number) {
-    const guestCart = await prisma.cart.findUnique({
+  private async mergeGuestCartIntoUserCart(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    userCartId: number,
+  ) {
+    const guestCart = await tx.cart.findUnique({
       where: { sessionId },
       include: { items: true },
     });
@@ -172,47 +187,56 @@ export class CartService {
       return;
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const item of guestCart.items) {
-        await tx.cartItem.upsert({
-          where: {
-            cartId_productId: {
-              cartId: userCartId,
-              productId: item.productId,
-            },
-          },
-          create: {
+    for (const item of guestCart.items) {
+      await tx.cartItem.upsert({
+        where: {
+          cartId_productId: {
             cartId: userCartId,
             productId: item.productId,
-            quantity: item.quantity,
           },
-          update: {
-            quantity: {
-              increment: item.quantity,
-            },
+        },
+        create: {
+          cartId: userCartId,
+          productId: item.productId,
+          quantity: item.quantity,
+        },
+        update: {
+          quantity: {
+            increment: item.quantity,
           },
-        });
-      }
-
-      await tx.cart.delete({
-        where: { id: guestCart.id },
+        },
       });
+    }
+
+    await tx.cart.delete({
+      where: { id: guestCart.id },
     });
   }
 
-  private async assertProductExists(productId: number) {
-    const product = await prisma.product.findUnique({
+  private async assertProductExists(tx: Prisma.TransactionClient, productId: number) {
+    const product = await tx.product.findUnique({
       where: { id: productId },
       select: { id: true },
     });
 
     if (!product) {
-      throw Object.assign(new Error("Product not found"), { statusCode: 404 });
+      throw new Error("Product not found");
     }
   }
 
-  private findCartById(cartId: number) {
-    return prisma.cart.findUniqueOrThrow({
+  private async assertUserExists(tx: Prisma.TransactionClient, userId: number) {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+  }
+
+  private async findCartById(tx: Prisma.TransactionClient, cartId: number) {
+    const cart = await tx.cart.findUnique({
       where: { id: cartId },
       include: {
         items: {
@@ -225,5 +249,11 @@ export class CartService {
         },
       },
     });
+
+    if (!cart) {
+      throw new Error("Cart not found");
+    }
+
+    return cart;
   }
 }

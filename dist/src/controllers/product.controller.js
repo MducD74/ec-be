@@ -1,5 +1,7 @@
 import axios from "axios";
 import { prisma } from "../lib/prisma.js";
+import { CategoryService } from "../services/category.service.js";
+import { InteractionService } from "../services/interaction.service.js";
 const aiClient = axios.create({
     baseURL: "http://localhost:8000",
     timeout: 2500,
@@ -31,7 +33,76 @@ async function getFallbackProducts() {
         },
     });
 }
+function toPositiveInteger(value, fallback) {
+    const numberValue = Number(value);
+    if (Number.isInteger(numberValue) && numberValue > 0) {
+        return numberValue;
+    }
+    return fallback;
+}
 export class ProductController {
+    categoryService;
+    interactionService;
+    constructor(categoryService = new CategoryService(), interactionService = new InteractionService()) {
+        this.categoryService = categoryService;
+        this.interactionService = interactionService;
+    }
+    async getProducts(req, res) {
+        const page = toPositiveInteger(req.query.page, 1) ?? 1;
+        const limit = toPositiveInteger(req.query.limit, 12) ?? 12;
+        const categoryId = toPositiveInteger(req.query.categoryId);
+        const skip = (page - 1) * limit;
+        let categoryIds;
+        if (typeof categoryId === "number") {
+            categoryIds = await this.categoryService.getCategoryAndDescendantIds(categoryId);
+            if (categoryIds.length === 0) {
+                return res.json({
+                    success: true,
+                    data: [],
+                    products: [],
+                    pagination: {
+                        total: 0,
+                        page,
+                        limit,
+                        totalPages: 0,
+                    },
+                });
+            }
+        }
+        const where = categoryIds
+            ? {
+                categoryId: {
+                    in: categoryIds,
+                },
+            }
+            : undefined;
+        const [total, products] = await Promise.all([
+            prisma.product.count({ where }),
+            prisma.product.findMany({
+                where,
+                skip,
+                take: limit,
+                include: {
+                    category: true,
+                    inventory: true,
+                },
+                orderBy: {
+                    createdAt: "desc",
+                },
+            }),
+        ]);
+        return res.json({
+            success: true,
+            data: products,
+            products,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        });
+    }
     async getRecommendations(req, res) {
         const userId = req.user?.userId ?? null;
         if (!userId) {
@@ -66,5 +137,32 @@ export class ProductController {
             const products = await getFallbackProducts();
             return res.json({ products });
         }
+    }
+    async getProductById(req, res) {
+        const productId = toPositiveInteger(req.params.id);
+        if (!productId) {
+            return res.status(400).json({ message: "Product id must be a positive integer" });
+        }
+        const product = await prisma.product.findUnique({
+            where: { id: productId },
+            include: {
+                category: true,
+                inventory: true,
+            },
+        });
+        if (!product) {
+            return res.status(404).json({ message: "Product not found" });
+        }
+        await this.interactionService.record({
+            authorization: req.header("authorization") ?? undefined,
+            sessionId: req.header("x-session-id") ?? undefined,
+            productId,
+            type: "VIEW",
+        });
+        return res.json({
+            success: true,
+            data: product,
+            product,
+        });
     }
 }

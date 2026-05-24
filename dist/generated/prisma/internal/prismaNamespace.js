@@ -69,6 +69,7 @@ export const AnyNull = runtime.AnyNull;
 export const ModelName = {
     User: 'User',
     Product: 'Product',
+    Category: 'Category',
     Order: 'Order',
     Inventory: 'Inventory',
     Cart: 'Cart',
@@ -80,6 +81,9 @@ export const ModelName = {
  * Enums
  */
 export const TransactionIsolationLevel = runtime.makeStrictEnum({
+    ReadUncommitted: 'ReadUncommitted',
+    ReadCommitted: 'ReadCommitted',
+    RepeatableRead: 'RepeatableRead',
     Serializable: 'Serializable'
 });
 export const UserScalarFieldEnum = {
@@ -94,16 +98,26 @@ export const ProductScalarFieldEnum = {
     id: 'id',
     name: 'name',
     description: 'description',
+    specifications: 'specifications',
     price: 'price',
     sku: 'sku',
+    imageUrl: 'imageUrl',
+    categoryId: 'categoryId',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
+};
+export const CategoryScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    parentId: 'parentId'
 };
 export const OrderScalarFieldEnum = {
     id: 'id',
     userId: 'userId',
     total: 'total',
     status: 'status',
+    paymentMethod: 'paymentMethod',
+    paymentStatus: 'paymentStatus',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
@@ -155,8 +169,21 @@ export const SortOrder = {
     asc: 'asc',
     desc: 'desc'
 };
+export const NullableJsonNullValueInput = {
+    DbNull: DbNull,
+    JsonNull: JsonNull
+};
+export const QueryMode = {
+    default: 'default',
+    insensitive: 'insensitive'
+};
 export const NullsOrder = {
     first: 'first',
     last: 'last'
+};
+export const JsonNullValueFilter = {
+    DbNull: DbNull,
+    JsonNull: JsonNull,
+    AnyNull: AnyNull
 };
 export const defineExtension = runtime.Extensions.defineExtension;

@@ -1,11 +1,14 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import adminRoutes from "./routes/admin.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
+import interactionRoutes from "./routes/interaction.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
+import voucherRoutes from "./routes/voucher.routes.js";
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const apiPrefix = "/api/v1";
@@ -19,6 +22,9 @@ app.use(`${apiPrefix}/categories`, categoryRoutes);
 app.use(`${apiPrefix}/products`, productRoutes);
 app.use(`${apiPrefix}/cart`, cartRoutes);
 app.use(`${apiPrefix}/orders`, orderRoutes);
+app.use(`${apiPrefix}/interactions`, interactionRoutes);
+app.use(`${apiPrefix}/vouchers`, voucherRoutes);
+app.use(`${apiPrefix}/admin`, adminRoutes);
 app.use((_req, res) => {
     res.status(404).json({
         success: false,

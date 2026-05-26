@@ -9,22 +9,35 @@
 */
 export const OrderStatus = {
     PENDING: 'PENDING',
+    PROCESSING: 'PROCESSING',
     PAID: 'PAID',
     SHIPPED: 'SHIPPED',
+    COMPLETED: 'COMPLETED',
     CANCELLED: 'CANCELLED'
 };
 export const InventoryStatus = {
     AVAILABLE: 'AVAILABLE',
     SOLD: 'SOLD'
 };
-export const InteractionType = {
+export const ActionType = {
     VIEW: 'VIEW',
-    CART: 'CART',
+    ADD_TO_CART: 'ADD_TO_CART',
     PURCHASE: 'PURCHASE'
 };
 export const PaymentMethod = {
-    COD: 'COD'
+    COD: 'COD',
+    STRIPE: 'STRIPE',
+    VNPAY: 'VNPAY',
+    ONLINE: 'ONLINE'
 };
 export const PaymentStatus = {
     PENDING: 'PENDING'
+};
+export const Role = {
+    USER: 'USER',
+    ADMIN: 'ADMIN'
+};
+export const DiscountType = {
+    PERCENTAGE: 'PERCENTAGE',
+    FIXED_AMOUNT: 'FIXED_AMOUNT'
 };

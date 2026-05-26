@@ -3,7 +3,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { JwtPayload, getJwtSecret } from "../middleware/auth.js";
 
-export type InteractionType = "VIEW" | "CART" | "PURCHASE";
+export type ActionType = "VIEW" | "ADD_TO_CART" | "PURCHASE";
 
 export interface InteractionContext {
   userId?: number;
@@ -13,14 +13,8 @@ export interface InteractionContext {
 
 export interface RecordInteractionInput extends InteractionContext {
   productId: number;
-  type: InteractionType;
+  actionType: ActionType;
 }
-
-const interactionScores: Record<InteractionType, number> = {
-  VIEW: 1,
-  CART: 3,
-  PURCHASE: 5,
-};
 
 function getBearerToken(authorization?: string) {
   return authorization?.startsWith("Bearer ")
@@ -61,14 +55,40 @@ export class InteractionService {
   ) {
     const user = this.getUserFromContext(input);
 
+    await this.assertProductExists(client, input.productId);
+
+    if (user?.userId) {
+      await this.assertUserExists(client, user.userId);
+    }
+
     return client.userInteraction.create({
       data: {
         userId: user?.userId,
-        sessionId: input.sessionId,
         productId: input.productId,
-        type: input.type,
-        score: interactionScores[input.type],
+        actionType: input.actionType,
       },
     });
+  }
+
+  private async assertProductExists(client: Prisma.TransactionClient, productId: number) {
+    const product = await client.product.findUnique({
+      where: { id: productId },
+      select: { id: true },
+    });
+
+    if (!product) {
+      throw new Error("Product not found");
+    }
+  }
+
+  private async assertUserExists(client: Prisma.TransactionClient, userId: number) {
+    const user = await client.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
   }
 }

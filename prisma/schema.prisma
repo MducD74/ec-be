@@ -9,8 +9,10 @@ datasource db {
 
 enum OrderStatus {
   PENDING
+  PROCESSING
   PAID
   SHIPPED
+  COMPLETED
   CANCELLED
 }
 
@@ -19,18 +21,31 @@ enum InventoryStatus {
   SOLD
 }
 
-enum InteractionType {
+enum ActionType {
   VIEW
-  CART
+  ADD_TO_CART
   PURCHASE
 }
 
 enum PaymentMethod {
   COD
+  STRIPE
+  VNPAY
+  ONLINE
 }
 
 enum PaymentStatus {
   PENDING
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
 }
 
 model User {
@@ -38,9 +53,11 @@ model User {
   email        String            @unique
   password     String
   name         String?
+  role         Role              @default(USER)
   orders       Order[]
   carts        Cart[]
   interactions UserInteraction[]
+  recommendationCache RecommendationCache?
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
 }
@@ -79,16 +96,36 @@ model Category {
 model Order {
   id            Int           @id @default(autoincrement())
   userId        Int
+  voucherId     Int?
   total         Decimal
+  discountAmount Float        @default(0)
   status        OrderStatus   @default(PENDING)
   paymentMethod PaymentMethod @default(COD)
   paymentStatus PaymentStatus @default(PENDING)
   user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voucher       Voucher?      @relation(fields: [voucherId], references: [id], onDelete: SetNull)
   items         OrderItem[]
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
   @@index([userId])
+  @@index([voucherId])
+}
+
+model Voucher {
+  id               Int          @id @default(autoincrement())
+  code             String       @unique
+  discountType     DiscountType
+  discountValue    Float
+  minOrderValue    Float        @default(0)
+  maxDiscountValue Float?
+  startDate        DateTime
+  endDate          DateTime
+  usageLimit       Int
+  usedCount        Int          @default(0)
+  isActive         Boolean      @default(true)
+  partnerId        String?
+  orders           Order[]
 }
 
 model Inventory {
@@ -156,18 +193,23 @@ model OrderItem {
 }
 
 model UserInteraction {
-  id        Int             @id @default(autoincrement())
-  userId    Int?
-  sessionId String?
-  productId Int
-  type      InteractionType
-  score     Int
-  user      User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt DateTime        @default(now())
+  id         Int        @id @default(autoincrement())
+  userId     Int?
+  productId  Int
+  actionType ActionType
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
 
   @@index([userId])
-  @@index([sessionId])
   @@index([productId])
-  @@index([type])
+  @@index([actionType])
+}
+
+model RecommendationCache {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @unique
+  recommendedProductIds Json
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt             DateTime @updatedAt
 }

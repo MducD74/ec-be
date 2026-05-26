@@ -43,11 +43,13 @@ export const ModelName = {
     Product: 'Product',
     Category: 'Category',
     Order: 'Order',
+    Voucher: 'Voucher',
     Inventory: 'Inventory',
     Cart: 'Cart',
     CartItem: 'CartItem',
     OrderItem: 'OrderItem',
-    UserInteraction: 'UserInteraction'
+    UserInteraction: 'UserInteraction',
+    RecommendationCache: 'RecommendationCache'
 };
 /*
  * Enums
@@ -63,6 +65,7 @@ export const UserScalarFieldEnum = {
     email: 'email',
     password: 'password',
     name: 'name',
+    role: 'role',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
@@ -86,12 +89,28 @@ export const CategoryScalarFieldEnum = {
 export const OrderScalarFieldEnum = {
     id: 'id',
     userId: 'userId',
+    voucherId: 'voucherId',
     total: 'total',
+    discountAmount: 'discountAmount',
     status: 'status',
     paymentMethod: 'paymentMethod',
     paymentStatus: 'paymentStatus',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
+};
+export const VoucherScalarFieldEnum = {
+    id: 'id',
+    code: 'code',
+    discountType: 'discountType',
+    discountValue: 'discountValue',
+    minOrderValue: 'minOrderValue',
+    maxDiscountValue: 'maxDiscountValue',
+    startDate: 'startDate',
+    endDate: 'endDate',
+    usageLimit: 'usageLimit',
+    usedCount: 'usedCount',
+    isActive: 'isActive',
+    partnerId: 'partnerId'
 };
 export const InventoryScalarFieldEnum = {
     id: 'id',
@@ -131,11 +150,15 @@ export const OrderItemScalarFieldEnum = {
 export const UserInteractionScalarFieldEnum = {
     id: 'id',
     userId: 'userId',
-    sessionId: 'sessionId',
     productId: 'productId',
-    type: 'type',
-    score: 'score',
+    actionType: 'actionType',
     createdAt: 'createdAt'
+};
+export const RecommendationCacheScalarFieldEnum = {
+    id: 'id',
+    userId: 'userId',
+    recommendedProductIds: 'recommendedProductIds',
+    updatedAt: 'updatedAt'
 };
 export const SortOrder = {
     asc: 'asc',
@@ -143,6 +166,9 @@ export const SortOrder = {
 };
 export const NullableJsonNullValueInput = {
     DbNull: DbNull,
+    JsonNull: JsonNull
+};
+export const JsonNullValueInput = {
     JsonNull: JsonNull
 };
 export const QueryMode = {

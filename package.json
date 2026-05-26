@@ -11,6 +11,8 @@
     "dev": "nodemon --watch src --ext ts --exec \"node --loader ts-node/esm src/server.ts\"",
     "build": "tsc",
     "seed": "npm run build && ts-node --esm prisma/seed.ts",
+    "seed:ai": "ts-node prisma/seed-ai.ts",
+    "seed:vouchers": "ts-node prisma/seed-vouchers.ts",
     "start": "node dist/src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

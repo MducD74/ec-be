@@ -137,7 +137,7 @@ export class ProductController {
     }
 
     try {
-      const response = await aiClient.get(`/recommend/${userId}`);
+      const response = await aiClient.get(`/recommend/hybrid/${userId}`);
       const recommendedProductIds = normalizeRecommendedProductIds(response.data);
 
       if (recommendedProductIds.length === 0) {
@@ -169,6 +169,64 @@ export class ProductController {
     }
   }
 
+  async getSimilarProducts(req: Request, res: Response) {
+    const productId = toPositiveInteger(req.params.id);
+
+    if (!productId) {
+      return res.status(400).json({ message: "Product id must be a positive integer" });
+    }
+
+    try {
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+        select: { id: true },
+      });
+
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+
+      const response = await aiClient.get(`/recommend/similar/${productId}`);
+      const similarProductIds = normalizeRecommendedProductIds(response.data);
+
+      if (similarProductIds.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          products: [],
+        });
+      }
+
+      const products = await prisma.product.findMany({
+        where: {
+          id: {
+            in: similarProductIds,
+          },
+        },
+        include: {
+          category: true,
+          inventory: true,
+        },
+      });
+      const productById = new Map(products.map((similarProduct) => [similarProduct.id, similarProduct]));
+      const orderedProducts = similarProductIds
+        .map((similarProductId) => productById.get(similarProductId))
+        .filter((similarProduct) => similarProduct !== undefined);
+
+      return res.json({
+        success: true,
+        data: orderedProducts,
+        products: orderedProducts,
+      });
+    } catch (error) {
+      console.error("Similar products service error:", error);
+      return res.status(503).json({
+        success: false,
+        message: "Unable to load similar products",
+      });
+    }
+  }
+
   async getProductById(req: Request, res: Response) {
     const productId = toPositiveInteger(req.params.id);
 
@@ -192,7 +250,7 @@ export class ProductController {
       authorization: req.header("authorization") ?? undefined,
       sessionId: req.header("x-session-id") ?? undefined,
       productId,
-      type: "VIEW",
+      actionType: "VIEW",
     });
 
     return res.json({

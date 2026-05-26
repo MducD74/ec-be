@@ -1,8 +1,15 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { InteractionService } from "./interaction.service.js";
+import { validateVoucher } from "./voucher.service.js";
 export class OrderService {
     interactionService = new InteractionService();
+    getInitialOrderStatus(paymentMethod) {
+        if (paymentMethod === "COD") {
+            return "PROCESSING";
+        }
+        return "PENDING";
+    }
     async checkout(input) {
         return prisma.$transaction(async (tx) => {
             const cart = await tx.cart.findUnique({
@@ -19,14 +26,40 @@ export class OrderService {
                 throw new Error("Cart is empty");
             }
             const orderTotal = cart.items.reduce((sum, item) => sum.plus(item.product.price.mul(item.quantity)), new Prisma.Decimal(0));
+            const voucherResult = input.voucherCode !== undefined
+                ? await validateVoucher(input.voucherCode, orderTotal, tx)
+                : null;
+            const discountAmount = voucherResult?.discountAmount ?? 0;
+            const finalTotal = orderTotal.minus(new Prisma.Decimal(discountAmount));
             const order = await tx.order.create({
                 data: {
                     userId: input.userId,
-                    total: orderTotal,
-                    paymentMethod: "COD",
+                    voucherId: voucherResult?.voucherId,
+                    total: finalTotal,
+                    discountAmount,
+                    status: this.getInitialOrderStatus(input.paymentMethod),
+                    paymentMethod: input.paymentMethod,
                     paymentStatus: "PENDING",
                 },
             });
+            if (voucherResult) {
+                const updateVoucherResult = await tx.voucher.updateMany({
+                    where: {
+                        id: voucherResult.voucherId,
+                        usedCount: {
+                            lt: voucherResult.usageLimit,
+                        },
+                    },
+                    data: {
+                        usedCount: {
+                            increment: 1,
+                        },
+                    },
+                });
+                if (updateVoucherResult.count !== 1) {
+                    throw new Error("Mã voucher đã hết lượt sử dụng");
+                }
+            }
             const orderItems = [];
             for (const cartItem of cart.items) {
                 const availableInventory = await tx.inventory.findMany({
@@ -72,7 +105,7 @@ export class OrderService {
                 await this.interactionService.recordWithClient(tx, {
                     userId: input.userId,
                     productId: cartItem.productId,
-                    type: "PURCHASE",
+                    actionType: "PURCHASE",
                 });
             }
             await tx.cartItem.deleteMany({
@@ -83,6 +116,7 @@ export class OrderService {
             return tx.order.findUniqueOrThrow({
                 where: { id: order.id },
                 include: {
+                    voucher: true,
                     items: {
                         include: {
                             product: true,
@@ -131,5 +165,33 @@ export class OrderService {
                 totalPages: Math.ceil(total / input.limit),
             },
         };
+    }
+    async completeOrder(input) {
+        const order = await prisma.order.findUnique({
+            where: { id: input.orderId },
+            select: {
+                id: true,
+                userId: true,
+            },
+        });
+        if (!order || order.userId !== input.userId) {
+            const error = new Error("Forbidden");
+            error.statusCode = 403;
+            throw error;
+        }
+        return prisma.order.update({
+            where: { id: input.orderId },
+            data: {
+                status: "COMPLETED",
+            },
+            include: {
+                items: {
+                    include: {
+                        product: true,
+                        inventory: true,
+                    },
+                },
+            },
+        });
     }
 }

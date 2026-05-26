@@ -1,9 +1,14 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { InteractionService } from "./interaction.service.js";
+import { validateVoucher } from "./voucher.service.js";
+
+export type CheckoutPaymentMethod = "COD" | "STRIPE" | "VNPAY" | "ONLINE";
 
 export interface CheckoutInput {
   userId: number;
+  paymentMethod: CheckoutPaymentMethod;
+  voucherCode?: string;
 }
 
 export interface OrderHistoryInput {
@@ -12,8 +17,21 @@ export interface OrderHistoryInput {
   limit: number;
 }
 
+export interface CompleteOrderInput {
+  orderId: number;
+  userId: number;
+}
+
 export class OrderService {
   private readonly interactionService = new InteractionService();
+
+  private getInitialOrderStatus(paymentMethod: CheckoutPaymentMethod) {
+    if (paymentMethod === "COD") {
+      return "PROCESSING" as const;
+    }
+
+    return "PENDING" as const;
+  }
 
   async checkout(input: CheckoutInput) {
     return prisma.$transaction(async (tx) => {
@@ -36,15 +54,43 @@ export class OrderService {
         (sum, item) => sum.plus(item.product.price.mul(item.quantity)),
         new Prisma.Decimal(0),
       );
+      const voucherResult = input.voucherCode !== undefined
+        ? await validateVoucher(input.voucherCode, orderTotal, tx)
+        : null;
+      const discountAmount = voucherResult?.discountAmount ?? 0;
+      const finalTotal = orderTotal.minus(new Prisma.Decimal(discountAmount));
 
       const order = await tx.order.create({
         data: {
           userId: input.userId,
-          total: orderTotal,
-          paymentMethod: "COD",
+          voucherId: voucherResult?.voucherId,
+          total: finalTotal,
+          discountAmount,
+          status: this.getInitialOrderStatus(input.paymentMethod),
+          paymentMethod: input.paymentMethod,
           paymentStatus: "PENDING",
         },
       });
+
+      if (voucherResult) {
+        const updateVoucherResult = await tx.voucher.updateMany({
+          where: {
+            id: voucherResult.voucherId,
+            usedCount: {
+              lt: voucherResult.usageLimit,
+            },
+          },
+          data: {
+            usedCount: {
+              increment: 1,
+            },
+          },
+        });
+
+        if (updateVoucherResult.count !== 1) {
+          throw new Error("Mã voucher đã hết lượt sử dụng");
+        }
+      }
 
       const orderItems = [];
 
@@ -100,7 +146,7 @@ export class OrderService {
         await this.interactionService.recordWithClient(tx, {
           userId: input.userId,
           productId: cartItem.productId,
-          type: "PURCHASE",
+          actionType: "PURCHASE",
         });
       }
 
@@ -113,6 +159,7 @@ export class OrderService {
       return tx.order.findUniqueOrThrow({
         where: { id: order.id },
         include: {
+          voucher: true,
           items: {
             include: {
               product: true,
@@ -164,5 +211,36 @@ export class OrderService {
         totalPages: Math.ceil(total / input.limit),
       },
     };
+  }
+
+  async completeOrder(input: CompleteOrderInput) {
+    const order = await prisma.order.findUnique({
+      where: { id: input.orderId },
+      select: {
+        id: true,
+        userId: true,
+      },
+    });
+
+    if (!order || order.userId !== input.userId) {
+      const error = new Error("Forbidden");
+      (error as Error & { statusCode?: number }).statusCode = 403;
+      throw error;
+    }
+
+    return prisma.order.update({
+      where: { id: input.orderId },
+      data: {
+        status: "COMPLETED",
+      },
+      include: {
+        items: {
+          include: {
+            product: true,
+            inventory: true,
+          },
+        },
+      },
+    });
   }
 }

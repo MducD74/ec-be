@@ -60,7 +60,7 @@ export class CartService {
                 authorization: context.authorization,
                 sessionId: context.sessionId,
                 productId: input.productId,
-                type: "CART",
+                actionType: "ADD_TO_CART",
             });
             return this.findCartById(tx, cart.id);
         });

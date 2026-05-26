@@ -35,6 +35,29 @@ function buildVoucherCode(existingCodes: Set<string>) {
   return code;
 }
 
+function formatVoucherValue(value: number) {
+  return new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function buildVoucherDescription(voucher: {
+  discountType: "PERCENTAGE" | "FIXED_AMOUNT";
+  discountValue: number;
+  minOrderValue: number;
+  maxDiscountValue: number | null;
+}) {
+  if (voucher.discountType === "PERCENTAGE") {
+    return `Giảm ${voucher.discountValue}% tối đa ${formatVoucherValue(
+      voucher.maxDiscountValue ?? 0,
+    )}đ cho đơn từ ${formatVoucherValue(voucher.minOrderValue)}đ`;
+  }
+
+  return `Giảm ${formatVoucherValue(voucher.discountValue)}đ cho đơn từ ${formatVoucherValue(
+    voucher.minOrderValue,
+  )}đ`;
+}
+
 function randomRoundedValue(min: number, max: number, step = 10_000) {
   const minStep = Math.ceil(min / step);
   const maxStep = Math.floor(max / step);
@@ -68,7 +91,7 @@ function buildVoucherSeeds(count = 50) {
     const discountType = Math.random() < 0.5 ? "PERCENTAGE" as const : "FIXED_AMOUNT" as const;
 
     if (discountType === "PERCENTAGE") {
-      return {
+      const voucher = {
         code: buildVoucherCode(existingCodes),
         discountType,
         discountValue: randomInteger(5, 30),
@@ -80,11 +103,16 @@ function buildVoucherSeeds(count = 50) {
         usedCount: 0,
         isActive: true,
       };
+
+      return {
+        ...voucher,
+        description: buildVoucherDescription(voucher),
+      };
     }
 
     const maxFixedDiscount = Math.max(20_000, Math.min(2_000_000, minOrderValue || 200_000));
 
-    return {
+    const voucher = {
       code: buildVoucherCode(existingCodes),
       discountType,
       discountValue: randomRoundedValue(20_000, maxFixedDiscount, 10_000),
@@ -95,6 +123,11 @@ function buildVoucherSeeds(count = 50) {
       usageLimit: 100,
       usedCount: 0,
       isActive: true,
+    };
+
+    return {
+      ...voucher,
+      description: buildVoucherDescription(voucher),
     };
   });
 }

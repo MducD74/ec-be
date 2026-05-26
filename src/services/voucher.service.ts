@@ -9,6 +9,12 @@ export interface ValidatedVoucher {
   discountAmount: number;
 }
 
+interface GetActiveVouchersOptions {
+  search?: string;
+  page: number;
+  limit: number;
+}
+
 function formatVoucherValue(value: number) {
   return new Intl.NumberFormat("vi-VN", {
     maximumFractionDigits: 0,
@@ -140,41 +146,83 @@ export class VoucherService {
       }));
   }
 
-  async getActiveVouchers() {
+  async getActiveVouchers(options: GetActiveVouchersOptions) {
     const now = new Date();
-    const vouchers = await prisma.voucher.findMany({
-      where: {
-        isActive: true,
-        endDate: {
-          gt: now,
+    const search = options.search?.trim();
+    const page = options.page;
+    const limit = options.limit;
+    const skip = (page - 1) * limit;
+    const where: Prisma.VoucherWhereInput = {
+      AND: [
+        {
+          isActive: true,
+          endDate: {
+            gt: now,
+          },
+          usedCount: {
+            lt: prisma.voucher.fields.usageLimit,
+          },
         },
-      },
-      select: {
-        id: true,
-        code: true,
-        discountType: true,
-        discountValue: true,
-        minOrderValue: true,
-        maxDiscountValue: true,
-        endDate: true,
-        usageLimit: true,
-        usedCount: true,
-      },
-    });
+        search
+          ? {
+              OR: [
+                {
+                  code: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+                {
+                  description: {
+                    contains: search,
+                    mode: "insensitive",
+                  },
+                },
+              ],
+            }
+          : {},
+      ],
+    };
 
-    return vouchers
-      .filter((voucher) => voucher.usedCount < voucher.usageLimit)
-      .sort((firstVoucher, secondVoucher) => secondVoucher.discountValue - firstVoucher.discountValue)
-      .map((voucher) => ({
+    const [total, vouchers] = await Promise.all([
+      prisma.voucher.count({ where }),
+      prisma.voucher.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: {
+          discountValue: "desc",
+        },
+        select: {
+          id: true,
+          code: true,
+          description: true,
+          discountType: true,
+          discountValue: true,
+          minOrderValue: true,
+          maxDiscountValue: true,
+          endDate: true,
+        },
+      }),
+    ]);
+
+    return {
+      data: vouchers.map((voucher) => ({
         id: voucher.id,
         code: voucher.code,
-        description: buildVoucherDescription(voucher),
+        description: voucher.description ?? buildVoucherDescription(voucher),
         discountType: voucher.discountType,
         discountValue: voucher.discountValue,
         minOrderValue: voucher.minOrderValue,
         maxDiscountValue: voucher.maxDiscountValue,
         endDate: voucher.endDate,
-      }));
+      })),
+      pagination: {
+        total,
+        page,
+        hasMore: skip + vouchers.length < total,
+      },
+    };
   }
 
   async validate(code: string, orderTotal: number) {

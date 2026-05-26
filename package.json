@@ -13,6 +13,7 @@
     "seed": "npm run build && ts-node --esm prisma/seed.ts",
     "seed:ai": "ts-node prisma/seed-ai.ts",
     "seed:vouchers": "ts-node prisma/seed-vouchers.ts",
+    "update:prices": "ts-node prisma/update-prices.ts",
     "start": "node dist/src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

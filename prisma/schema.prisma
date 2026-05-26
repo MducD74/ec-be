@@ -115,6 +115,7 @@ model Order {
 model Voucher {
   id               Int          @id @default(autoincrement())
   code             String       @unique
+  description      String?
   discountType     DiscountType
   discountValue    Float
   minOrderValue    Float        @default(0)

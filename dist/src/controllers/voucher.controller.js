@@ -16,13 +16,19 @@ function toPositiveInteger(value) {
     return undefined;
 }
 export class VoucherController {
-    async getActiveVouchers(_req, res, _next) {
+    async getActiveVouchers(req, res, _next) {
         try {
-            const vouchers = await voucherService.getActiveVouchers();
+            const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+            const page = toPositiveInteger(req.query.page) ?? 1;
+            const limit = toPositiveInteger(req.query.limit) ?? 5;
+            const result = await voucherService.getActiveVouchers({
+                search,
+                page,
+                limit,
+            });
             return res.json({
-                success: true,
-                data: vouchers,
-                vouchers,
+                data: result.data,
+                pagination: result.pagination,
             });
         }
         catch (error) {

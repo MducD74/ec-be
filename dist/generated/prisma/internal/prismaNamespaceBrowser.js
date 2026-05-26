@@ -101,6 +101,7 @@ export const OrderScalarFieldEnum = {
 export const VoucherScalarFieldEnum = {
     id: 'id',
     code: 'code',
+    description: 'description',
     discountType: 'discountType',
     discountValue: 'discountValue',
     minOrderValue: 'minOrderValue',

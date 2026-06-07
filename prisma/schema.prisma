@@ -65,6 +65,7 @@ model User {
 model Product {
   id           Int               @id @default(autoincrement())
   name         String
+  brand        String?
   description  String?
   specifications Json?
   price        Decimal

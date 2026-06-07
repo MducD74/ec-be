@@ -12,6 +12,7 @@
     "build": "tsc",
     "seed": "npm run build && ts-node --esm prisma/seed.ts",
     "seed:ai": "ts-node prisma/seed-ai.ts",
+    "seed:brands": "npm run prisma:generate && npm run build && ts-node --esm prisma/seed-brands.ts",
     "seed:vouchers": "ts-node prisma/seed-vouchers.ts",
     "update:prices": "ts-node prisma/update-prices.ts",
     "start": "node dist/src/server.js",

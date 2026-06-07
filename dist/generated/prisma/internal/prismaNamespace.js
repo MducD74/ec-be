@@ -100,6 +100,7 @@ export const UserScalarFieldEnum = {
 export const ProductScalarFieldEnum = {
     id: 'id',
     name: 'name',
+    brand: 'brand',
     description: 'description',
     specifications: 'specifications',
     price: 'price',

@@ -40,6 +40,9 @@ function toPositiveInteger(value, fallback) {
     }
     return fallback;
 }
+function toTrimmedString(value) {
+    return typeof value === "string" ? value.trim() : "";
+}
 export class ProductController {
     categoryService;
     interactionService;
@@ -51,6 +54,8 @@ export class ProductController {
         const page = toPositiveInteger(req.query.page, 1) ?? 1;
         const limit = toPositiveInteger(req.query.limit, 12) ?? 12;
         const categoryId = toPositiveInteger(req.query.categoryId);
+        const search = toTrimmedString(req.query.search || req.query.q || req.query.name);
+        const brand = toTrimmedString(req.query.brand);
         const skip = (page - 1) * limit;
         let categoryIds;
         if (typeof categoryId === "number") {
@@ -69,13 +74,31 @@ export class ProductController {
                 });
             }
         }
-        const where = categoryIds
-            ? {
+        const whereFilters = [];
+        if (categoryIds) {
+            whereFilters.push({
                 categoryId: {
                     in: categoryIds,
                 },
-            }
-            : undefined;
+            });
+        }
+        if (search) {
+            whereFilters.push({
+                name: {
+                    contains: search,
+                    mode: "insensitive",
+                },
+            });
+        }
+        if (brand) {
+            whereFilters.push({
+                brand: {
+                    contains: brand,
+                    mode: "insensitive",
+                },
+            });
+        }
+        const where = whereFilters.length > 0 ? { AND: whereFilters } : undefined;
         const [total, products] = await Promise.all([
             prisma.product.count({ where }),
             prisma.product.findMany({

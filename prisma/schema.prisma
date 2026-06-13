@@ -74,6 +74,7 @@ model Product {
   categoryId   Int?
   category     Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   inventory    Inventory[]
+  variants     ProductVariant[]
   orderItems   OrderItem[]
   cartItems    CartItem[]
   interactions UserInteraction[]
@@ -81,6 +82,21 @@ model Product {
   updatedAt    DateTime          @updatedAt
 
   @@index([categoryId])
+}
+
+model ProductVariant {
+  id             Int      @id @default(autoincrement())
+  productId      Int
+  sku            String   @unique
+  attributeName  String
+  attributeValue String
+  price          Decimal
+  stock          Int      @default(0)
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([productId])
 }
 
 model Category {

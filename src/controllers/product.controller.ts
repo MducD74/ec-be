@@ -1,5 +1,6 @@
 import axios from "axios";
 import { Request, Response } from "express";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../lib/prisma.js";
 import { AuthenticatedRequest } from "../middleware/auth.js";
 import { CategoryService } from "../services/category.service.js";
@@ -59,6 +60,10 @@ function toPositiveInteger(value: unknown, fallback?: number) {
   return fallback;
 }
 
+function toTrimmedString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 export class ProductController {
   constructor(
     private readonly categoryService = new CategoryService(),
@@ -69,6 +74,8 @@ export class ProductController {
     const page = toPositiveInteger(req.query.page, 1) ?? 1;
     const limit = toPositiveInteger(req.query.limit, 12) ?? 12;
     const categoryId = toPositiveInteger(req.query.categoryId);
+    const search = toTrimmedString(req.query.search || req.query.q || req.query.name);
+    const brand = toTrimmedString(req.query.brand);
     const skip = (page - 1) * limit;
 
     let categoryIds: number[] | undefined;
@@ -91,13 +98,36 @@ export class ProductController {
       }
     }
 
-    const where = categoryIds
-      ? {
-          categoryId: {
-            in: categoryIds,
-          },
-        }
-      : undefined;
+    const whereFilters: Prisma.ProductWhereInput[] = [];
+
+    if (categoryIds) {
+      whereFilters.push({
+        categoryId: {
+          in: categoryIds,
+        },
+      });
+    }
+
+    if (search) {
+      whereFilters.push({
+        name: {
+          contains: search,
+          mode: "insensitive",
+        },
+      });
+    }
+
+    if (brand) {
+      whereFilters.push({
+        brand: {
+          contains: brand,
+          mode: "insensitive",
+        },
+      });
+    }
+
+    const where: Prisma.ProductWhereInput | undefined =
+      whereFilters.length > 0 ? { AND: whereFilters } : undefined;
 
     const [total, products] = await Promise.all([
       prisma.product.count({ where }),

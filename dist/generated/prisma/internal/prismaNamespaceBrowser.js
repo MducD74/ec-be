@@ -41,6 +41,8 @@ export const AnyNull = runtime.AnyNull;
 export const ModelName = {
     User: 'User',
     Product: 'Product',
+    Brand: 'Brand',
+    ProductVariant: 'ProductVariant',
     Category: 'Category',
     Order: 'Order',
     Voucher: 'Voucher',
@@ -49,7 +51,8 @@ export const ModelName = {
     CartItem: 'CartItem',
     OrderItem: 'OrderItem',
     UserInteraction: 'UserInteraction',
-    RecommendationCache: 'RecommendationCache'
+    RecommendationCache: 'RecommendationCache',
+    SystemConfig: 'SystemConfig'
 };
 /*
  * Enums
@@ -66,19 +69,39 @@ export const UserScalarFieldEnum = {
     password: 'password',
     name: 'name',
     role: 'role',
+    isActive: 'isActive',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
 export const ProductScalarFieldEnum = {
     id: 'id',
     name: 'name',
-    brand: 'brand',
+    brandId: 'brandId',
     description: 'description',
     specifications: 'specifications',
     price: 'price',
     sku: 'sku',
     imageUrl: 'imageUrl',
     categoryId: 'categoryId',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+export const BrandScalarFieldEnum = {
+    id: 'id',
+    name: 'name',
+    description: 'description',
+    logoUrl: 'logoUrl',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt'
+};
+export const ProductVariantScalarFieldEnum = {
+    id: 'id',
+    productId: 'productId',
+    sku: 'sku',
+    attributeName: 'attributeName',
+    attributeValue: 'attributeValue',
+    price: 'price',
+    stock: 'stock',
     createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
@@ -160,6 +183,13 @@ export const RecommendationCacheScalarFieldEnum = {
     id: 'id',
     userId: 'userId',
     recommendedProductIds: 'recommendedProductIds',
+    updatedAt: 'updatedAt'
+};
+export const SystemConfigScalarFieldEnum = {
+    id: 'id',
+    collaborativeWeight: 'collaborativeWeight',
+    contentWeight: 'contentWeight',
+    brandWeight: 'brandWeight',
     updatedAt: 'updatedAt'
 };
 export const SortOrder = {

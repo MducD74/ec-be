@@ -1,23 +1,35 @@
 import "dotenv/config";
+import { createBullBoard } from "@bull-board/api";
+import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
+import { ExpressAdapter } from "@bull-board/express";
 import cors from "cors";
 import express from "express";
 import adminRoutes from "./routes/admin.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import brandRoutes from "./routes/brand.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import categoryRoutes from "./routes/category.routes.js";
 import interactionRoutes from "./routes/interaction.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import voucherRoutes from "./routes/voucher.routes.js";
+import { aiTrainingQueue, scheduleAiTrainingCronJob } from "./queues/ai-training.queue.js";
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
 const apiPrefix = "/api/v1";
+const serverAdapter = new ExpressAdapter();
+serverAdapter.setBasePath("/admin/queues");
+createBullBoard({
+    queues: [new BullMQAdapter(aiTrainingQueue)],
+    serverAdapter,
+});
 app.use(cors());
 app.use(express.json());
 app.get("/health", (_req, res) => {
     res.json({ status: "ok" });
 });
 app.use(`${apiPrefix}/auth`, authRoutes);
+app.use(`${apiPrefix}/brands`, brandRoutes);
 app.use(`${apiPrefix}/categories`, categoryRoutes);
 app.use(`${apiPrefix}/products`, productRoutes);
 app.use(`${apiPrefix}/cart`, cartRoutes);
@@ -25,6 +37,10 @@ app.use(`${apiPrefix}/orders`, orderRoutes);
 app.use(`${apiPrefix}/interactions`, interactionRoutes);
 app.use(`${apiPrefix}/vouchers`, voucherRoutes);
 app.use(`${apiPrefix}/admin`, adminRoutes);
+app.use("/admin/queues", serverAdapter.getRouter());
+void scheduleAiTrainingCronJob().catch((error) => {
+    console.error("Failed to schedule AI training cron job:", error);
+});
 app.use((_req, res) => {
     res.status(404).json({
         success: false,

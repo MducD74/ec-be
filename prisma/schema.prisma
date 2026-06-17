@@ -54,6 +54,7 @@ model User {
   password     String
   name         String?
   role         Role              @default(USER)
+  isActive     Boolean           @default(true)
   orders       Order[]
   carts        Cart[]
   interactions UserInteraction[]
@@ -65,7 +66,8 @@ model User {
 model Product {
   id           Int               @id @default(autoincrement())
   name         String
-  brand        String?
+  brandId      Int?
+  brand        Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
   description  String?
   specifications Json?
   price        Decimal
@@ -82,6 +84,17 @@ model Product {
   updatedAt    DateTime          @updatedAt
 
   @@index([categoryId])
+  @@index([brandId])
+}
+
+model Brand {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  logoUrl     String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model ProductVariant {
@@ -230,4 +243,12 @@ model RecommendationCache {
   recommendedProductIds Json
   user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   updatedAt             DateTime @updatedAt
+}
+
+model SystemConfig {
+  id                  Int      @id @default(autoincrement())
+  collaborativeWeight Float    @default(0.4)
+  contentWeight       Float    @default(0.3)
+  brandWeight         Float    @default(0.3)
+  updatedAt           DateTime @updatedAt
 }

@@ -42,6 +42,7 @@ async function getFallbackProducts() {
   return prisma.product.findMany({
     take: 4,
     include: {
+      brand: true,
       inventory: true,
     },
     orderBy: {
@@ -64,6 +65,15 @@ function toTrimmedString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function createPaginationMeta(totalItems: number, currentPage: number, limit: number) {
+  return {
+    totalItems,
+    totalPages: Math.ceil(totalItems / limit),
+    currentPage,
+    limit,
+  };
+}
+
 export class ProductController {
   constructor(
     private readonly categoryService = new CategoryService(),
@@ -72,10 +82,10 @@ export class ProductController {
 
   async getProducts(req: Request, res: Response) {
     const page = toPositiveInteger(req.query.page, 1) ?? 1;
-    const limit = toPositiveInteger(req.query.limit, 12) ?? 12;
+    const limit = toPositiveInteger(req.query.limit, 10) ?? 10;
     const categoryId = toPositiveInteger(req.query.categoryId);
+    const brandId = toPositiveInteger(req.query.brandId);
     const search = toTrimmedString(req.query.search || req.query.q || req.query.name);
-    const brand = toTrimmedString(req.query.brand);
     const skip = (page - 1) * limit;
 
     let categoryIds: number[] | undefined;
@@ -88,12 +98,7 @@ export class ProductController {
           success: true,
           data: [],
           products: [],
-          pagination: {
-            total: 0,
-            page,
-            limit,
-            totalPages: 0,
-          },
+          meta: createPaginationMeta(0, page, limit),
         });
       }
     }
@@ -117,12 +122,9 @@ export class ProductController {
       });
     }
 
-    if (brand) {
+    if (typeof brandId === "number") {
       whereFilters.push({
-        brand: {
-          contains: brand,
-          mode: "insensitive",
-        },
+        brandId,
       });
     }
 
@@ -136,6 +138,7 @@ export class ProductController {
         skip,
         take: limit,
         include: {
+          brand: true,
           category: true,
           inventory: true,
         },
@@ -149,12 +152,7 @@ export class ProductController {
       success: true,
       data: products,
       products,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-      },
+      meta: createPaginationMeta(total, page, limit),
     });
   }
 
@@ -182,6 +180,7 @@ export class ProductController {
           },
         },
         include: {
+          brand: true,
           inventory: true,
         },
       });
@@ -234,6 +233,7 @@ export class ProductController {
           },
         },
         include: {
+          brand: true,
           category: true,
           inventory: true,
         },
@@ -267,6 +267,7 @@ export class ProductController {
     const product = await prisma.product.findUnique({
       where: { id: productId },
       include: {
+        brand: true,
         category: true,
         inventory: true,
       },

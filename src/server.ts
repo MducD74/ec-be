@@ -43,7 +43,7 @@ app.use(`${apiPrefix}/orders`, orderRoutes);
 app.use(`${apiPrefix}/interactions`, interactionRoutes);
 app.use(`${apiPrefix}/vouchers`, voucherRoutes);
 app.use(`${apiPrefix}/admin`, adminRoutes);
-app.use("/admin/queues", serverAdapter.getRouter());
+app.use(`${apiPrefix}/admin/queues`, serverAdapter.getRouter());
 
 void scheduleAiTrainingCronJob().catch((error) => {
   console.error("Failed to schedule AI training cron job:", error);

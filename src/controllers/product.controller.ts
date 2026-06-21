@@ -158,7 +158,6 @@ export class ProductController {
 
   async getRecommendations(req: Request, res: Response) {
     const userId = (req as AuthenticatedRequest).user?.userId ?? null;
-
     if (!userId) {
       const products = await getFallbackProducts();
       return res.json({ products });
@@ -167,10 +166,9 @@ export class ProductController {
     try {
       const response = await aiClient.get(`/recommend/hybrid/${userId}`);
       const recommendedProductIds = normalizeRecommendedProductIds(response.data);
-
       if (recommendedProductIds.length === 0) {
         const products = await getFallbackProducts();
-        return res.json({ products });
+        return res.json({ products: [] });
       }
 
       const products = await prisma.product.findMany({

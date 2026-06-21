@@ -4,8 +4,7 @@ import { Queue, Worker, type JobsOptions } from "bullmq";
 const AI_TRAINING_QUEUE_NAME = "ai-training-queue";
 const CRON_TRAIN_JOB_NAME = "cron-train";
 const MANUAL_TRAIN_JOB_NAME = "manual-train";
-const AI_TRAINING_API_URL =
-  process.env.AI_TRAINING_API_URL ?? process.env.AI_SERVICE_TRAIN_URL ?? "http://127.0.0.1:8000/train";
+const AI_TRAINING_API_URL = "http://127.0.0.1:8000/train";
 
 function getRedisConnection() {
   const redisUrl = process.env.REDIS_URL;

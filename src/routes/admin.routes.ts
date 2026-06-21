@@ -5,6 +5,7 @@ import { authenticateToken, requireAdmin } from "../middleware/auth.js";
 const router = Router();
 const adminController = new AdminController();
 
+router.get("/ai-config", adminController.getAiConfig.bind(adminController));
 router.use(authenticateToken, requireAdmin);
 
 router.get("/stats", adminController.getStats.bind(adminController));
@@ -19,10 +20,8 @@ router.get("/categories", adminController.getCategories.bind(adminController));
 router.get("/vouchers", adminController.getVouchers.bind(adminController));
 router.patch("/vouchers/:id/toggle", adminController.toggleVoucher.bind(adminController));
 router.put("/vouchers/:id/toggle", adminController.toggleVoucher.bind(adminController));
-router.get("/ai-config", adminController.getAiConfig.bind(adminController));
 router.put("/ai-config", adminController.updateAiConfig.bind(adminController));
 router.get("/ai/interactions", adminController.getAiInteractions.bind(adminController));
-router.post("/train", adminController.trainAiModel.bind(adminController));
 router.post("/ai/train", adminController.trainAiModel.bind(adminController));
 
 export default router;

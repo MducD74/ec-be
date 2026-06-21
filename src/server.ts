@@ -3,6 +3,7 @@ import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ExpressAdapter } from "@bull-board/express";
 import cors from "cors";
+import morgan from "morgan";
 import express, { NextFunction, Request, Response } from "express";
 import adminRoutes from "./routes/admin.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -14,6 +15,7 @@ import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import voucherRoutes from "./routes/voucher.routes.js";
 import { aiTrainingQueue, scheduleAiTrainingCronJob } from "./queues/ai-training.queue.js";
+import { appLog, httpStream } from "./config/winston.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 3000);
@@ -30,6 +32,18 @@ createBullBoard({
 app.use(cors());
 app.use(express.json());
 
+const REGEX =
+  /^(\/api\/queues|\/js|\/css|\/images|\/queue|\/monitor|\/favicon|\/locales)/;
+
+app.use(
+  morgan("combined", {
+    stream: httpStream,
+    skip: function (req) {
+      return REGEX.test(req.url);
+    }
+  })
+);
+
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
@@ -43,7 +57,7 @@ app.use(`${apiPrefix}/orders`, orderRoutes);
 app.use(`${apiPrefix}/interactions`, interactionRoutes);
 app.use(`${apiPrefix}/vouchers`, voucherRoutes);
 app.use(`${apiPrefix}/admin`, adminRoutes);
-app.use(`${apiPrefix}/admin/queues`, serverAdapter.getRouter());
+app.use(`/admin/queues`, serverAdapter.getRouter());
 
 void scheduleAiTrainingCronJob().catch((error) => {
   console.error("Failed to schedule AI training cron job:", error);
@@ -62,7 +76,8 @@ app.use((_req, res) => {
 app.use((err: Error & { statusCode?: number }, _req: Request, res: Response, _next: NextFunction) => {
   const statusCode = err.statusCode ?? 500;
 
-  console.error(err);
+  appLog.error(`message - ${err.message}, stack trace - ${err.stack}`);
+
   res.status(statusCode).json({
     success: false,
     error: {

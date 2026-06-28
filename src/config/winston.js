@@ -121,7 +121,7 @@ container.add("app", {
     })
   ]
 });
-
+container.add("http", createLoggerOptions("http"));
 container.add("ai-service", createLoggerOptions("ai-service"));
 
 export const appLog = container.get("app");

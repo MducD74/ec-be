@@ -22,7 +22,7 @@ const port = Number(process.env.PORT ?? 3000);
 const apiPrefix = "/api/v1";
 const serverAdapter = new ExpressAdapter();
 
-serverAdapter.setBasePath("/admin/queues");
+serverAdapter.setBasePath(`${apiPrefix}/monitor`);
 
 createBullBoard({
   queues: [new BullMQAdapter(aiTrainingQueue)],
@@ -57,7 +57,7 @@ app.use(`${apiPrefix}/orders`, orderRoutes);
 app.use(`${apiPrefix}/interactions`, interactionRoutes);
 app.use(`${apiPrefix}/vouchers`, voucherRoutes);
 app.use(`${apiPrefix}/admin`, adminRoutes);
-app.use(`/admin/queues`, serverAdapter.getRouter());
+app.use(`${apiPrefix}/monitor`, serverAdapter.getRouter());
 
 void scheduleAiTrainingCronJob().catch((error) => {
   console.error("Failed to schedule AI training cron job:", error);

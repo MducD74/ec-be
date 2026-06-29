@@ -50,6 +50,28 @@ export class CartService {
     });
   }
 
+  async checkInventory(tx: Prisma.TransactionClient,input: CartItemInput) {
+    assertPositiveInteger(input.productId, "productId");
+    assertPositiveInteger(input.quantity, "quantity");
+
+    const inventory = await tx.inventory.findMany({
+      where: {
+        productId: input.productId,
+        status: "AVAILABLE"
+      }
+    });
+
+    if (!inventory || inventory.length === 0) {
+      throw new Error("Inventory not found");
+    }
+
+    if (inventory.length < input.quantity) {
+      throw new Error("Insufficient inventory");
+    }
+
+    return true;
+  }
+
   async addItem(context: CartContext, input: CartItemInput) {
     return prisma.$transaction(async (tx) => {
       assertPositiveInteger(input.productId, "productId");
@@ -95,7 +117,7 @@ export class CartService {
 
       const cart = await this.resolveCart(tx, context);
       await this.assertProductExists(tx, input.productId);
-
+      await this.checkInventory(tx, input);
       await tx.cartItem.upsert({
         where: {
           cartId_productId: {

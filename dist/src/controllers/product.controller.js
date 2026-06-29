@@ -134,7 +134,7 @@ export class ProductController {
             const recommendedProductIds = normalizeRecommendedProductIds(response.data);
             if (recommendedProductIds.length === 0) {
                 const products = await getFallbackProducts();
-                return res.json({ products });
+                return res.json({ products: [] });
             }
             const products = await prisma.product.findMany({
                 where: {

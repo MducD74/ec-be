@@ -14,6 +14,7 @@ import interactionRoutes from "./routes/interaction.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import voucherRoutes from "./routes/voucher.routes.js";
+import paymentRoutes from "./routes/payment.routes.js";
 import { aiTrainingQueue, scheduleAiTrainingCronJob } from "./queues/ai-training.queue.js";
 import { appLog, httpStream } from "./config/winston.js";
 
@@ -56,6 +57,7 @@ app.use(`${apiPrefix}/cart`, cartRoutes);
 app.use(`${apiPrefix}/orders`, orderRoutes);
 app.use(`${apiPrefix}/interactions`, interactionRoutes);
 app.use(`${apiPrefix}/vouchers`, voucherRoutes);
+app.use(`${apiPrefix}/payment`, paymentRoutes);
 app.use(`${apiPrefix}/admin`, adminRoutes);
 app.use(`${apiPrefix}/monitor`, serverAdapter.getRouter());
 
@@ -85,6 +87,16 @@ app.use((err: Error & { statusCode?: number }, _req: Request, res: Response, _ne
       message: statusCode >= 500 ? "Internal server error" : err.message,
     },
   });
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught Exception:");
+  console.dir(err, { depth: null });
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled Rejection:");
+  console.dir(reason, { depth: null });
 });
 
 app.listen(port, () => {

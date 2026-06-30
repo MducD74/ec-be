@@ -80,7 +80,8 @@ export const ModelName = {
     OrderItem: 'OrderItem',
     UserInteraction: 'UserInteraction',
     RecommendationCache: 'RecommendationCache',
-    SystemConfig: 'SystemConfig'
+    SystemConfig: 'SystemConfig',
+    PaymentTransaction: 'PaymentTransaction'
 };
 /**
  * Enums
@@ -96,15 +97,14 @@ export const UserScalarFieldEnum = {
     email: 'email',
     password: 'password',
     name: 'name',
-    role: 'role',
-    isActive: 'isActive',
     createdAt: 'createdAt',
-    updatedAt: 'updatedAt'
+    updatedAt: 'updatedAt',
+    role: 'role',
+    isActive: 'isActive'
 };
 export const ProductScalarFieldEnum = {
     id: 'id',
     name: 'name',
-    brandId: 'brandId',
     description: 'description',
     specifications: 'specifications',
     price: 'price',
@@ -112,7 +112,8 @@ export const ProductScalarFieldEnum = {
     imageUrl: 'imageUrl',
     categoryId: 'categoryId',
     createdAt: 'createdAt',
-    updatedAt: 'updatedAt'
+    updatedAt: 'updatedAt',
+    brandId: 'brandId'
 };
 export const BrandScalarFieldEnum = {
     id: 'id',
@@ -141,19 +142,18 @@ export const CategoryScalarFieldEnum = {
 export const OrderScalarFieldEnum = {
     id: 'id',
     userId: 'userId',
-    voucherId: 'voucherId',
     total: 'total',
-    discountAmount: 'discountAmount',
     status: 'status',
+    createdAt: 'createdAt',
+    updatedAt: 'updatedAt',
     paymentMethod: 'paymentMethod',
     paymentStatus: 'paymentStatus',
-    createdAt: 'createdAt',
-    updatedAt: 'updatedAt'
+    discountAmount: 'discountAmount',
+    voucherId: 'voucherId'
 };
 export const VoucherScalarFieldEnum = {
     id: 'id',
     code: 'code',
-    description: 'description',
     discountType: 'discountType',
     discountValue: 'discountValue',
     minOrderValue: 'minOrderValue',
@@ -163,7 +163,8 @@ export const VoucherScalarFieldEnum = {
     usageLimit: 'usageLimit',
     usedCount: 'usedCount',
     isActive: 'isActive',
-    partnerId: 'partnerId'
+    partnerId: 'partnerId',
+    description: 'description'
 };
 export const InventoryScalarFieldEnum = {
     id: 'id',
@@ -204,8 +205,8 @@ export const UserInteractionScalarFieldEnum = {
     id: 'id',
     userId: 'userId',
     productId: 'productId',
-    actionType: 'actionType',
-    createdAt: 'createdAt'
+    createdAt: 'createdAt',
+    actionType: 'actionType'
 };
 export const RecommendationCacheScalarFieldEnum = {
     id: 'id',
@@ -218,6 +219,26 @@ export const SystemConfigScalarFieldEnum = {
     collaborativeWeight: 'collaborativeWeight',
     contentWeight: 'contentWeight',
     brandWeight: 'brandWeight',
+    updatedAt: 'updatedAt'
+};
+export const PaymentTransactionScalarFieldEnum = {
+    id: 'id',
+    orderId: 'orderId',
+    provider: 'provider',
+    transactionRef: 'transactionRef',
+    providerTransactionId: 'providerTransactionId',
+    amount: 'amount',
+    currency: 'currency',
+    status: 'status',
+    responseCode: 'responseCode',
+    responseMessage: 'responseMessage',
+    paymentUrl: 'paymentUrl',
+    bankCode: 'bankCode',
+    bankTransactionNo: 'bankTransactionNo',
+    paidAt: 'paidAt',
+    expiredAt: 'expiredAt',
+    rawResponse: 'rawResponse',
+    createdAt: 'createdAt',
     updatedAt: 'updatedAt'
 };
 export const SortOrder = {

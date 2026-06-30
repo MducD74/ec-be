@@ -1,6 +1,9 @@
 import { Prisma } from "../../generated/prisma/client.js";
+import { appLog } from "../config/winston.js";
 import { prisma } from "../lib/prisma.js";
 import { InteractionService } from "./interaction.service.js";
+import { paymentTransactionService } from "./payment-transaction.service.js";
+import { vnPayService } from "./vnpay.service.js";
 import { validateVoucher } from "./voucher.service.js";
 export class OrderService {
     interactionService = new InteractionService();
@@ -10,8 +13,22 @@ export class OrderService {
         }
         return "PENDING";
     }
+    buildTransactionRef(orderId) {
+        // VNPay TxnRef tối đa 100 ký tự, chỉ alphanumeric
+        // Dùng orderId (UUID) bỏ dấu gạch ngang
+        return `${orderId.toString().replace(/-/g, "")}_${Date.now().toString()}`;
+    }
+    getPaymentExpiredAt() {
+        const expiredAt = new Date();
+        expiredAt.setMinutes(expiredAt.getMinutes() + 15);
+        return expiredAt;
+    }
     async checkout(input) {
-        return prisma.$transaction(async (tx) => {
+        // Với VNPAY, ipAddr là bắt buộc
+        if (input.paymentMethod === "VNPAY" && !input.ipAddr) {
+            throw new Error("IP address is required for VNPay payment");
+        }
+        const order = await prisma.$transaction(async (tx) => {
             const cart = await tx.cart.findUnique({
                 where: { userId: input.userId },
                 include: {
@@ -46,15 +63,9 @@ export class OrderService {
                 const updateVoucherResult = await tx.voucher.updateMany({
                     where: {
                         id: voucherResult.voucherId,
-                        usedCount: {
-                            lt: voucherResult.usageLimit,
-                        },
+                        usedCount: { lt: voucherResult.usageLimit },
                     },
-                    data: {
-                        usedCount: {
-                            increment: 1,
-                        },
-                    },
+                    data: { usedCount: { increment: 1 } },
                 });
                 if (updateVoucherResult.count !== 1) {
                     throw new Error("Mã voucher đã hết lượt sử dụng");
@@ -63,13 +74,8 @@ export class OrderService {
             const orderItems = [];
             for (const cartItem of cart.items) {
                 const availableInventory = await tx.inventory.findMany({
-                    where: {
-                        productId: cartItem.productId,
-                        status: "AVAILABLE",
-                    },
-                    orderBy: {
-                        id: "asc",
-                    },
+                    where: { productId: cartItem.productId, status: "AVAILABLE" },
+                    orderBy: { id: "asc" },
                     take: cartItem.quantity,
                 });
                 if (availableInventory.length !== cartItem.quantity) {
@@ -85,18 +91,10 @@ export class OrderService {
                         total: orderItemTotal,
                     },
                 });
-                const inventoryIds = availableInventory.map((inventoryItem) => inventoryItem.id);
+                const inventoryIds = availableInventory.map((i) => i.id);
                 const updateResult = await tx.inventory.updateMany({
-                    where: {
-                        id: {
-                            in: inventoryIds,
-                        },
-                        status: "AVAILABLE",
-                    },
-                    data: {
-                        status: "SOLD",
-                        orderItemId: orderItem.id,
-                    },
+                    where: { id: { in: inventoryIds }, status: "AVAILABLE" },
+                    data: { status: "SOLD", orderItemId: orderItem.id },
                 });
                 if (updateResult.count !== cartItem.quantity) {
                     throw new Error(`Unable to reserve exact serial quantity for product ${cartItem.productId}`);
@@ -108,11 +106,30 @@ export class OrderService {
                     actionType: "PURCHASE",
                 });
             }
-            await tx.cartItem.deleteMany({
-                where: {
-                    cartId: cart.id,
-                },
-            });
+            await tx.cartItem.deleteMany({ where: { cartId: cart.id } });
+            // ── VNPay: tạo PaymentTransaction và sinh URL ─────────────────────────
+            if (input.paymentMethod === "VNPAY") {
+                const transactionRef = this.buildTransactionRef(order.id);
+                const amountVnd = finalTotal.toNumber();
+                const expiredAt = this.getPaymentExpiredAt();
+                const paymentUrl = vnPayService.createPaymentUrl({
+                    orderId: transactionRef,
+                    amount: amountVnd,
+                    orderInfo: `Thanh toan don hang ${order.id}`,
+                    ipAddr: input.ipAddr,
+                });
+                await paymentTransactionService.createTransaction(tx, {
+                    orderId: order.id,
+                    transactionRef,
+                    amount: finalTotal,
+                    paymentUrl,
+                    expiredAt,
+                });
+                appLog.info("[Order] VNPay payment transaction created", {
+                    orderId: order.id,
+                    transactionRef,
+                });
+            }
             return tx.order.findUniqueOrThrow({
                 where: { id: order.id },
                 include: {
@@ -123,9 +140,21 @@ export class OrderService {
                             inventory: true,
                         },
                     },
+                    paymentTransactions: input.paymentMethod === "VNPAY",
                 },
             });
         });
+        if (input.paymentMethod === "VNPAY") {
+            const latestTx = await prisma.paymentTransaction.findFirst({
+                where: { orderId: order.id },
+                orderBy: { createdAt: "desc" },
+            });
+            return {
+                order,
+                paymentUrl: latestTx?.paymentUrl ?? undefined,
+            };
+        }
+        return { order };
     }
     async getHistory(input) {
         const skip = (input.page - 1) * input.limit;
@@ -165,6 +194,40 @@ export class OrderService {
                 totalPages: Math.ceil(total / input.limit),
             },
         };
+    }
+    async getOrderByTransactionRef(input) {
+        const transaction = await prisma.paymentTransaction.findFirst({
+            where: {
+                transactionRef: input.transactionRef,
+            },
+            orderBy: {
+                createdAt: "desc",
+            },
+            include: {
+                order: {
+                    include: {
+                        voucher: true,
+                        items: {
+                            include: {
+                                product: true,
+                                inventory: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        if (!transaction) {
+            const error = new Error("Payment transaction not found");
+            error.statusCode = 404;
+            throw error;
+        }
+        if (transaction.order.userId !== input.userId) {
+            const error = new Error("Order not found");
+            error.statusCode = 404;
+            throw error;
+        }
+        return transaction.order;
     }
     async completeOrder(input) {
         const order = await prisma.order.findUnique({

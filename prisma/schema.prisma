@@ -7,13 +7,239 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id                  Int                  @id @default(autoincrement())
+  email               String               @unique
+  password            String
+  name                String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  role                Role                 @default(USER)
+  isActive            Boolean              @default(true)
+  carts               Cart?
+  orders              Order[]
+  recommendationCache RecommendationCache?
+  interactions        UserInteraction[]
+}
+
+model Product {
+  id             Int               @id @default(autoincrement())
+  name           String
+  description    String?
+  specifications Json?
+  price          Decimal
+  sku            String            @unique
+  imageUrl       String?
+  categoryId     Int?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  brandId        Int?
+  cartItems      CartItem[]
+  inventory      Inventory[]
+  orderItems     OrderItem[]
+  brand          Brand?            @relation(fields: [brandId], references: [id])
+  category       Category?         @relation(fields: [categoryId], references: [id])
+  variants       ProductVariant[]
+  interactions   UserInteraction[]
+
+  @@index([categoryId])
+  @@index([brandId])
+}
+
+model Brand {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  logoUrl     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model ProductVariant {
+  id             Int      @id @default(autoincrement())
+  productId      Int
+  sku            String   @unique
+  attributeName  String
+  attributeValue String
+  price          Decimal
+  stock          Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+}
+
+model Category {
+  id       Int        @id @default(autoincrement())
+  name     String
+  parentId Int?
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryTree")
+  products Product[]
+
+  @@index([parentId])
+}
+
+model Order {
+  id             Int           @id @default(autoincrement())
+  userId         Int
+  total          Decimal
+  status         OrderStatus   @default(PENDING)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  paymentMethod  PaymentMethod @default(COD)
+  paymentStatus  PaymentStatus @default(PENDING)
+  discountAmount Float         @default(0)
+  voucherId      Int?
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voucher        Voucher?      @relation(fields: [voucherId], references: [id])
+  items          OrderItem[]
+  paymentTransactions PaymentTransaction[]
+
+  @@index([userId])
+  @@index([voucherId])
+}
+
+model Voucher {
+  id               Int          @id @default(autoincrement())
+  code             String       @unique
+  discountType     DiscountType
+  discountValue    Float
+  minOrderValue    Float        @default(0)
+  maxDiscountValue Float?
+  startDate        DateTime
+  endDate          DateTime
+  usageLimit       Int
+  usedCount        Int          @default(0)
+  isActive         Boolean      @default(true)
+  partnerId        String?
+  description      String?
+  orders           Order[]
+}
+
+model Inventory {
+  id           Int             @id @default(autoincrement())
+  productId    Int
+  serialNumber String          @unique
+  imei         String?         @unique
+  status       InventoryStatus @default(AVAILABLE)
+  orderItemId  Int?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  orderItem    OrderItem?      @relation(fields: [orderItemId], references: [id])
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([status])
+  @@index([orderItemId])
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int?       @unique
+  sessionId String?    @unique
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+
+  @@index([userId])
+  @@index([sessionId])
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cartId    Int
+  productId Int
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+  @@index([productId])
+}
+
+model OrderItem {
+  id        Int         @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Int
+  unitPrice Decimal
+  total     Decimal
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  inventory Inventory[]
+  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product     @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model UserInteraction {
+  id         Int        @id @default(autoincrement())
+  userId     Int?
+  productId  Int
+  createdAt  DateTime   @default(now())
+  actionType ActionType
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([productId])
+  @@index([actionType])
+}
+
+model RecommendationCache {
+  id                    Int      @id @default(autoincrement())
+  userId                Int      @unique
+  recommendedProductIds Json
+  updatedAt             DateTime @updatedAt
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SystemConfig {
+  id                  Int      @id @default(autoincrement())
+  collaborativeWeight Float    @default(0.4)
+  contentWeight       Float    @default(0.3)
+  brandWeight         Float    @default(0.3)
+  updatedAt           DateTime @updatedAt
+}
+
+model PaymentTransaction {
+  id                    Int       @id @default(autoincrement())
+  orderId               Int
+  order                 Order     @relation(fields: [orderId], references: [id])
+  provider              String    @db.VarChar(30)
+  transactionRef        String    @db.VarChar(100)
+  providerTransactionId String?   @db.VarChar(100)
+  amount                Decimal   @db.Decimal(18, 2)
+  currency              String?   @default("VND") @db.VarChar(10)
+  status                String    @db.VarChar(30)
+  responseCode          String?   @db.VarChar(10)
+  responseMessage       String?
+  paymentUrl            String?
+  bankCode              String?   @db.VarChar(50)
+  bankTransactionNo     String?   @db.VarChar(100)
+  paidAt                DateTime? @db.Timestamp(6)
+  expiredAt             DateTime? @db.Timestamp(6)
+  rawResponse           Json?
+  createdAt             DateTime? @default(now()) @db.Timestamp(6)
+  updatedAt             DateTime? @default(now()) @db.Timestamp(6)
+}
+
 enum OrderStatus {
   PENDING
-  PROCESSING
   PAID
   SHIPPED
-  COMPLETED
   CANCELLED
+  COMPLETED
+  PROCESSING
 }
 
 enum InventoryStatus {
@@ -36,6 +262,9 @@ enum PaymentMethod {
 
 enum PaymentStatus {
   PENDING
+  PAID
+  FAILED
+  REFUNDED
 }
 
 enum Role {
@@ -46,209 +275,4 @@ enum Role {
 enum DiscountType {
   PERCENTAGE
   FIXED_AMOUNT
-}
-
-model User {
-  id           Int               @id @default(autoincrement())
-  email        String            @unique
-  password     String
-  name         String?
-  role         Role              @default(USER)
-  isActive     Boolean           @default(true)
-  orders       Order[]
-  carts        Cart[]
-  interactions UserInteraction[]
-  recommendationCache RecommendationCache?
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-}
-
-model Product {
-  id           Int               @id @default(autoincrement())
-  name         String
-  brandId      Int?
-  brand        Brand?            @relation(fields: [brandId], references: [id], onDelete: SetNull)
-  description  String?
-  specifications Json?
-  price        Decimal
-  sku          String            @unique
-  imageUrl     String?
-  categoryId   Int?
-  category     Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  inventory    Inventory[]
-  variants     ProductVariant[]
-  orderItems   OrderItem[]
-  cartItems    CartItem[]
-  interactions UserInteraction[]
-  createdAt    DateTime          @default(now())
-  updatedAt    DateTime          @updatedAt
-
-  @@index([categoryId])
-  @@index([brandId])
-}
-
-model Brand {
-  id          Int       @id @default(autoincrement())
-  name        String    @unique
-  description String?
-  logoUrl     String?
-  products    Product[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-}
-
-model ProductVariant {
-  id             Int      @id @default(autoincrement())
-  productId      Int
-  sku            String   @unique
-  attributeName  String
-  attributeValue String
-  price          Decimal
-  stock          Int      @default(0)
-  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([productId])
-}
-
-model Category {
-  id       Int        @id @default(autoincrement())
-  name     String
-  parentId Int?
-  parent   Category? @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
-  children Category[] @relation("CategoryTree")
-  products Product[]
-
-  @@index([parentId])
-}
-
-model Order {
-  id            Int           @id @default(autoincrement())
-  userId        Int
-  voucherId     Int?
-  total         Decimal
-  discountAmount Float        @default(0)
-  status        OrderStatus   @default(PENDING)
-  paymentMethod PaymentMethod @default(COD)
-  paymentStatus PaymentStatus @default(PENDING)
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  voucher       Voucher?      @relation(fields: [voucherId], references: [id], onDelete: SetNull)
-  items         OrderItem[]
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-
-  @@index([userId])
-  @@index([voucherId])
-}
-
-model Voucher {
-  id               Int          @id @default(autoincrement())
-  code             String       @unique
-  description      String?
-  discountType     DiscountType
-  discountValue    Float
-  minOrderValue    Float        @default(0)
-  maxDiscountValue Float?
-  startDate        DateTime
-  endDate          DateTime
-  usageLimit       Int
-  usedCount        Int          @default(0)
-  isActive         Boolean      @default(true)
-  partnerId        String?
-  orders           Order[]
-}
-
-model Inventory {
-  id           Int             @id @default(autoincrement())
-  productId    Int
-  serialNumber String          @unique
-  imei         String?         @unique
-  status       InventoryStatus @default(AVAILABLE)
-  product      Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  orderItemId  Int?
-  orderItem    OrderItem?      @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-
-  @@index([productId])
-  @@index([status])
-  @@index([orderItemId])
-}
-
-model Cart {
-  id        Int        @id @default(autoincrement())
-  userId    Int?
-  sessionId String?
-  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  items     CartItem[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  @@unique([userId])
-  @@unique([sessionId])
-  @@index([userId])
-  @@index([sessionId])
-}
-
-model CartItem {
-  id        Int      @id @default(autoincrement())
-  cartId    Int
-  productId Int
-  quantity  Int      @default(1)
-  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([cartId, productId])
-  @@index([cartId])
-  @@index([productId])
-}
-
-model OrderItem {
-  id        Int         @id @default(autoincrement())
-  orderId   Int
-  productId Int
-  quantity  Int
-  unitPrice Decimal
-  total     Decimal
-  order     Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
-  inventory Inventory[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
-
-  @@index([orderId])
-  @@index([productId])
-}
-
-model UserInteraction {
-  id         Int        @id @default(autoincrement())
-  userId     Int?
-  productId  Int
-  actionType ActionType
-  user       User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
-  createdAt  DateTime   @default(now())
-
-  @@index([userId])
-  @@index([productId])
-  @@index([actionType])
-}
-
-model RecommendationCache {
-  id                    Int      @id @default(autoincrement())
-  userId                Int      @unique
-  recommendedProductIds Json
-  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  updatedAt             DateTime @updatedAt
-}
-
-model SystemConfig {
-  id                  Int      @id @default(autoincrement())
-  collaborativeWeight Float    @default(0.4)
-  contentWeight       Float    @default(0.3)
-  brandWeight         Float    @default(0.3)
-  updatedAt           DateTime @updatedAt
 }

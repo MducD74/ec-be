@@ -9,11 +9,11 @@
 */
 export const OrderStatus = {
     PENDING: 'PENDING',
-    PROCESSING: 'PROCESSING',
     PAID: 'PAID',
     SHIPPED: 'SHIPPED',
+    CANCELLED: 'CANCELLED',
     COMPLETED: 'COMPLETED',
-    CANCELLED: 'CANCELLED'
+    PROCESSING: 'PROCESSING'
 };
 export const InventoryStatus = {
     AVAILABLE: 'AVAILABLE',
@@ -31,7 +31,10 @@ export const PaymentMethod = {
     ONLINE: 'ONLINE'
 };
 export const PaymentStatus = {
-    PENDING: 'PENDING'
+    PENDING: 'PENDING',
+    PAID: 'PAID',
+    FAILED: 'FAILED',
+    REFUNDED: 'REFUNDED'
 };
 export const Role = {
     USER: 'USER',

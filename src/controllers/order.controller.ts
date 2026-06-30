@@ -49,14 +49,25 @@ export class OrderController {
       if (!req.user) {
         return res.status(401).json({ message: "Missing authenticated user" });
       }
-
-      const order = await orderService.checkout({
+ 
+      const ipAddr =
+        (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ??
+        req.socket.remoteAddress ??
+        "127.0.0.1";
+ 
+      const result = await orderService.checkout({
         userId: req.user.userId,
         paymentMethod: getCheckoutPaymentMethod(req.body?.paymentMethod),
-        voucherCode: typeof req.body?.voucherCode === "string" ? req.body.voucherCode : undefined,
+        voucherCode:
+          typeof req.body?.voucherCode === "string"
+            ? req.body.voucherCode
+            : undefined,
+        ipAddr,
       });
-
-      return res.status(201).json({ order });
+ 
+      // COD: { order }
+      // VNPay: { order, paymentUrl }
+      return res.status(201).json(result);
     } catch (error) {
       return res.status(400).json({ message: getErrorMessage(error) });
     }
@@ -114,4 +125,46 @@ export class OrderController {
       return res.status(statusCode).json({ message: getErrorMessage(error) });
     }
   }
+  async getOrderByTransactionRef(
+    req: AuthenticatedRequest,
+    res: Response,
+    _next: NextFunction,
+  ) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ message: "Missing authenticated user" });
+      }
+
+      const { transactionRef } = req.params;
+
+      if (!transactionRef) {
+        return res.status(400).json({
+          message: "Transaction reference not provided",
+        });
+      }
+
+      if (typeof transactionRef !== "string") {
+        return res.status(400).json({
+          message: "Invalid transaction reference",
+        });
+      }
+
+      const order = await orderService.getOrderByTransactionRef({
+        transactionRef,
+        userId: req.user.userId,
+      });
+
+      return res.json({
+        success: true,
+        data: order,
+      });
+    } catch (error) {
+      const statusCode =
+        (error as Error & { statusCode?: number }).statusCode ?? 400;
+
+      return res.status(statusCode).json({
+        message: getErrorMessage(error),
+      });
+    }
+}
 }

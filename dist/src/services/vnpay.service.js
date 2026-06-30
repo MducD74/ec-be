@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import qs from "qs";
 import { appLog } from "../config/winston.js";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getVnPayConfig() {
@@ -31,18 +32,28 @@ function formatVnPayDate(date) {
         `${pad(date.getMinutes())}` +
         `${pad(date.getSeconds())}`);
 }
-function sortObject(obj) {
-    return Object.fromEntries(Object.entries(obj).sort(([a], [b]) => a.localeCompare(b)));
+function sortObject(params) {
+    const sorted = {};
+    const keys = Object.keys(params).sort();
+    for (const key of keys) {
+        sorted[key] = encodeURIComponent(params[key]).replace(/%20/g, "+");
+    }
+    return sorted;
 }
 function buildSignedQuery(params, hashSecret) {
     const sorted = sortObject(params);
-    const signData = new URLSearchParams(sorted).toString();
+    const signData = qs.stringify(sorted, {
+        encode: false,
+    });
     const secureHash = crypto
         .createHmac("sha512", hashSecret)
-        .update(Buffer.from(signData, "utf-8"))
+        .update(Buffer.from(signData, "utf8"))
         .digest("hex");
     const query = `${signData}&vnp_SecureHash=${secureHash}`;
-    return { query, secureHash };
+    return {
+        query,
+        secureHash,
+    };
 }
 function extractSecureHash(params) {
     const { vnp_SecureHash, vnp_SecureHashType, ...rest } = params;
@@ -73,11 +84,8 @@ function responseCodeToMessage(code) {
 export class VnPayService {
     createPaymentUrl(params) {
         const config = getVnPayConfig();
-        appLog.info(`[VnPay] Created payment URL ${JSON.stringify(config)}`);
         const now = new Date();
-        const expireDate = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes
-        // VNPay requires amount * 100 (no decimal)
-        const vnpAmount = String(Math.round(params.amount) * 100);
+        const expireDate = new Date(now.getTime() + 15 * 60 * 1000); // 15 phut
         const vnpParams = {
             vnp_Version: "2.1.0",
             vnp_Command: "pay",
@@ -87,9 +95,8 @@ export class VnPayService {
             vnp_TxnRef: params.orderId,
             vnp_OrderInfo: params.orderInfo,
             vnp_OrderType: "other",
-            vnp_Amount: vnpAmount,
+            vnp_Amount: String(Math.round(params.amount) * 100),
             vnp_ReturnUrl: config.returnUrl,
-            vnp_IpnUrl: config.ipnUrl,
             vnp_IpAddr: params.ipAddr,
             vnp_CreateDate: formatVnPayDate(now),
             vnp_ExpireDate: formatVnPayDate(expireDate),
@@ -98,12 +105,7 @@ export class VnPayService {
             vnpParams.vnp_BankCode = params.bankCode;
         }
         const { query } = buildSignedQuery(vnpParams, config.hashSecret);
-        const paymentUrl = `${config.paymentUrl}?${query}`;
-        appLog.info("[VnPay] Created payment URL", {
-            orderId: params.orderId,
-            amount: params.amount,
-        });
-        return paymentUrl;
+        return `${config.paymentUrl}?${query}`;
     }
     verifySignature(params) {
         const config = getVnPayConfig();

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import qs from "qs";
 import { appLog } from "../config/winston.js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -86,10 +87,16 @@ function formatVnPayDate(date: Date): string {
   );
 }
 
-function sortObject(obj: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(obj).sort(([a], [b]) => a.localeCompare(b)),
-  );
+function sortObject(params: Record<string, string>): Record<string, string> {
+  const sorted: Record<string, string> = {};
+
+  const keys = Object.keys(params).sort();
+
+  for (const key of keys) {
+    sorted[key] = encodeURIComponent(params[key]).replace(/%20/g, "+");
+  }
+
+  return sorted;
 }
 
 function buildSignedQuery(
@@ -97,13 +104,22 @@ function buildSignedQuery(
   hashSecret: string,
 ): { query: string; secureHash: string } {
   const sorted = sortObject(params);
-  const signData = new URLSearchParams(sorted).toString();
+
+  const signData = qs.stringify(sorted, {
+    encode: false,
+  });
+
   const secureHash = crypto
     .createHmac("sha512", hashSecret)
-    .update(Buffer.from(signData, "utf-8"))
+    .update(Buffer.from(signData, "utf8"))
     .digest("hex");
+
   const query = `${signData}&vnp_SecureHash=${secureHash}`;
-  return { query, secureHash };
+
+  return {
+    query,
+    secureHash,
+  };
 }
 
 function extractSecureHash(params: Record<string, string>): {
@@ -141,44 +157,36 @@ function responseCodeToMessage(code: string): string {
 export class VnPayService {
   createPaymentUrl(params: CreatePaymentUrlParams): string {
     const config = getVnPayConfig();
-    appLog.info(`[VnPay] Created payment URL ${JSON.stringify(config)}`);
     const now = new Date();
-    const expireDate = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes
-
-    // VNPay requires amount * 100 (no decimal)
-    const vnpAmount = String(Math.round(params.amount) * 100);
+    const expireDate = new Date(now.getTime() + 15 * 60 * 1000); // 15 phut
 
     const vnpParams: Record<string, string> = {
-      vnp_Version: "2.1.0",
-      vnp_Command: "pay",
-      vnp_TmnCode: config.tmnCode,
-      vnp_Locale: params.locale ?? "vn",
-      vnp_CurrCode: "VND",
-      vnp_TxnRef: params.orderId,
-      vnp_OrderInfo: params.orderInfo,
-      vnp_OrderType: "other",
-      vnp_Amount: vnpAmount,
-      vnp_ReturnUrl: config.returnUrl,
-      vnp_IpnUrl: config.ipnUrl,
-      vnp_IpAddr: params.ipAddr,
-      vnp_CreateDate: formatVnPayDate(now),
-      vnp_ExpireDate: formatVnPayDate(expireDate),
+        vnp_Version: "2.1.0",
+        vnp_Command: "pay",
+        vnp_TmnCode: config.tmnCode,
+        vnp_Locale: params.locale ?? "vn",
+        vnp_CurrCode: "VND",
+        vnp_TxnRef: params.orderId,
+        vnp_OrderInfo: params.orderInfo,
+        vnp_OrderType: "other",
+        vnp_Amount: String(Math.round(params.amount) * 100),
+        vnp_ReturnUrl: config.returnUrl,
+        vnp_IpAddr: params.ipAddr,
+        vnp_CreateDate: formatVnPayDate(now),
+        vnp_ExpireDate: formatVnPayDate(expireDate),
     };
 
     if (params.bankCode) {
-      vnpParams.vnp_BankCode = params.bankCode;
+        vnpParams.vnp_BankCode = params.bankCode;
     }
 
-    const { query } = buildSignedQuery(vnpParams, config.hashSecret);
-    const paymentUrl = `${config.paymentUrl}?${query}`;
+    const { query } = buildSignedQuery(
+        vnpParams,
+        config.hashSecret,
+    );
 
-    appLog.info("[VnPay] Created payment URL", {
-      orderId: params.orderId,
-      amount: params.amount,
-    });
-
-    return paymentUrl;
-  }
+    return `${config.paymentUrl}?${query}`;
+    }
 
   verifySignature(params: Record<string, string>): boolean {
     const config = getVnPayConfig();

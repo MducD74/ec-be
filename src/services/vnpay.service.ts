@@ -141,6 +141,7 @@ function responseCodeToMessage(code: string): string {
 export class VnPayService {
   createPaymentUrl(params: CreatePaymentUrlParams): string {
     const config = getVnPayConfig();
+    appLog.info(`[VnPay] Created payment URL ${JSON.stringify(config)}`);
     const now = new Date();
     const expireDate = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes
 

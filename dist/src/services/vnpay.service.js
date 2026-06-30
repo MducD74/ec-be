@@ -73,6 +73,7 @@ function responseCodeToMessage(code) {
 export class VnPayService {
     createPaymentUrl(params) {
         const config = getVnPayConfig();
+        appLog.info(`[VnPay] Created payment URL ${JSON.stringify(config)}`);
         const now = new Date();
         const expireDate = new Date(now.getTime() + 15 * 60 * 1000); // 15 minutes
         // VNPay requires amount * 100 (no decimal)

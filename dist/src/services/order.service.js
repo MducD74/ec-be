@@ -4,7 +4,46 @@ import { prisma } from "../lib/prisma.js";
 import { InteractionService } from "./interaction.service.js";
 import { paymentTransactionService } from "./payment-transaction.service.js";
 import { vnPayService } from "./vnpay.service.js";
-import { validateVoucher } from "./voucher.service.js";
+async function validateVoucher(orderTotal, tx, lockedVoucher) {
+    if (!lockedVoucher) {
+        throw new Error("Mã voucher không hợp lệ");
+    }
+    const voucher = await tx.voucher.findUniqueOrThrow({
+        where: { id: lockedVoucher.id },
+    });
+    const now = new Date();
+    if (!voucher.isActive) {
+        throw new Error("Mã voucher hiện không khả dụng");
+    }
+    if (voucher.startDate && voucher.startDate > now) {
+        throw new Error("Mã voucher chưa đến thời gian áp dụng");
+    }
+    if (voucher.endDate && voucher.endDate < now) {
+        throw new Error("Mã voucher đã hết hạn");
+    }
+    if (lockedVoucher.usedCount >= lockedVoucher.usageLimit) {
+        throw new Error("Mã voucher đã hết lượt sử dụng");
+    }
+    if (voucher.minOrderValue && orderTotal.lessThan(voucher.minOrderValue)) {
+        throw new Error(`Đơn hàng tối thiểu ${voucher.minOrderValue.toString()}đ để áp dụng mã này`);
+    }
+    const orderTotalValue = orderTotal.toNumber();
+    if (orderTotalValue < voucher.minOrderValue) {
+        throw new Error("Đơn hàng chưa đạt giá trị tối thiểu để dùng voucher");
+    }
+    const rawDiscount = voucher.discountType === "PERCENTAGE"
+        ? (orderTotalValue * voucher.discountValue) / 100
+        : voucher.discountValue;
+    const cappedDiscount = voucher.discountType === "PERCENTAGE" && voucher.maxDiscountValue !== null
+        ? Math.min(rawDiscount, voucher.maxDiscountValue)
+        : rawDiscount;
+    const discountAmount = Math.min(Math.max(cappedDiscount, 0), orderTotalValue);
+    return {
+        voucherId: voucher.id,
+        discountAmount,
+        usageLimit: lockedVoucher.usageLimit,
+    };
+}
 export class OrderService {
     interactionService = new InteractionService();
     getInitialOrderStatus(paymentMethod) {
@@ -29,6 +68,7 @@ export class OrderService {
             throw new Error("IP address is required for VNPay payment");
         }
         const order = await prisma.$transaction(async (tx) => {
+            await tx.$executeRaw `SELECT pg_advisory_xact_lock(hashtext(${input.userId}))`; // lock userId để serialize các transaction checkout của cùng 1 user
             const cart = await tx.cart.findUnique({
                 where: { userId: input.userId },
                 include: {
@@ -43,8 +83,19 @@ export class OrderService {
                 throw new Error("Cart is empty");
             }
             const orderTotal = cart.items.reduce((sum, item) => sum.plus(item.product.price.mul(item.quantity)), new Prisma.Decimal(0));
+            // ── Lock voucher record TRƯỚC khi validate, không chỉ ở bước update ──
+            let lockedVoucher = null;
+            if (input.voucherCode !== undefined) {
+                const rows = await tx.$queryRaw `
+          SELECT id, "usageLimit", "usedCount"
+          FROM "Voucher"
+          WHERE code = ${input.voucherCode}
+          FOR UPDATE
+        `;
+                lockedVoucher = rows[0] ?? null;
+            }
             const voucherResult = input.voucherCode !== undefined
-                ? await validateVoucher(input.voucherCode, orderTotal, tx)
+                ? await validateVoucher(orderTotal, tx, lockedVoucher)
                 : null;
             const discountAmount = voucherResult?.discountAmount ?? 0;
             const finalTotal = orderTotal.minus(new Prisma.Decimal(discountAmount));
@@ -54,7 +105,7 @@ export class OrderService {
                     voucherId: voucherResult?.voucherId,
                     total: finalTotal,
                     discountAmount,
-                    status: this.getInitialOrderStatus(input.paymentMethod),
+                    status: "PROCESSING",
                     paymentMethod: input.paymentMethod,
                     paymentStatus: "PENDING",
                 },
@@ -73,11 +124,16 @@ export class OrderService {
             }
             const orderItems = [];
             for (const cartItem of cart.items) {
-                const availableInventory = await tx.inventory.findMany({
-                    where: { productId: cartItem.productId, status: "AVAILABLE" },
-                    orderBy: { id: "asc" },
-                    take: cartItem.quantity,
-                });
+                // ── Lock đúng N dòng inventory AVAILABLE cho sản phẩm này ──
+                const availableInventory = await tx.$queryRaw `
+          SELECT id
+          FROM "Inventory"
+          WHERE "productId" = ${cartItem.productId}
+            AND status = 'AVAILABLE'
+          ORDER BY id ASC
+          LIMIT ${cartItem.quantity}
+          FOR UPDATE
+        `;
                 if (availableInventory.length !== cartItem.quantity) {
                     throw new Error(`Not enough available serials for product ${cartItem.productId}`);
                 }
@@ -235,6 +291,7 @@ export class OrderService {
             select: {
                 id: true,
                 userId: true,
+                paymentMethod: true,
             },
         });
         if (!order || order.userId !== input.userId) {
@@ -242,10 +299,18 @@ export class OrderService {
             error.statusCode = 403;
             throw error;
         }
+        let status = "PAID";
+        if (order.paymentMethod === "COD") {
+            status = "SHIPPED";
+        }
+        else {
+            status = "COMPLETED";
+        }
         return prisma.order.update({
             where: { id: input.orderId },
             data: {
-                status: "COMPLETED",
+                status: status,
+                paymentStatus: "PAID",
             },
             include: {
                 items: {

@@ -89,8 +89,7 @@ export class PaymentController {
                     await tx.order.update({
                         where: { id: existingTransaction.orderId },
                         data: {
-                            paymentStatus: "PAID",
-                            status: "COMPLETED",
+                            paymentStatus: "PAID"
                         },
                     });
                     appLog.info("[PaymentController] IPN: order confirmed", {

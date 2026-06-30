@@ -516,6 +516,146 @@ export class AdminController {
     }
   }
 
+  async createProduct(req: Request, res: Response, _next: NextFunction) {
+    try {
+      const {
+        name,
+        description,
+        brandId,
+        categoryId,
+        sku,
+        price,
+        quantity,
+      } = req.body;
+
+      if (!name?.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "Product name is required.",
+        });
+      }
+
+      if (!sku?.trim()) {
+        return res.status(400).json({
+          success: false,
+          message: "SKU is required.",
+        });
+      }
+
+      if (price == null || price < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid price.",
+        });
+      }
+
+      if (!Number.isInteger(quantity) || quantity < 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid quantity.",
+        });
+      }
+
+      const [brand, category, existingProduct] = await Promise.all([
+        prisma.brand.findUnique({
+          where: { id: brandId },
+          select: { id: true },
+        }),
+        prisma.category.findUnique({
+          where: { id: categoryId },
+          select: { id: true },
+        }),
+        prisma.product.findUnique({
+          where: { sku },
+          select: { id: true },
+        }),
+      ]);
+
+      if (!brand) {
+        return res.status(404).json({
+          success: false,
+          message: "Brand not found.",
+        });
+      }
+
+      if (!category) {
+        return res.status(404).json({
+          success: false,
+          message: "Category not found.",
+        });
+      }
+
+      if (existingProduct) {
+        return res.status(409).json({
+          success: false,
+          message: "SKU already exists.",
+        });
+      }
+
+      const product = await prisma.$transaction(async (tx) => {
+        const createdProduct = await tx.product.create({
+          data: {
+            name: name.trim(),
+            description,
+            sku: sku.trim(),
+            price,
+            brandId,
+            categoryId,
+          },
+        });
+
+        if (quantity > 0) {
+          await tx.inventory.createMany({
+            data: Array.from({ length: quantity }, (_, index) => ({
+              productId: createdProduct.id,
+              serialNumber: `${createdProduct.sku}-${Date.now()}-${index + 1}`,
+            })),
+          });
+        }
+
+        return tx.product.findUnique({
+          where: {
+            id: createdProduct.id,
+          },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            sku: true,
+            price: true,
+            brand: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            category: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+            _count: {
+              select: {
+                inventory: true,
+              },
+            },
+          },
+        });
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: product,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Unable to create product: ${getErrorMessage(error)}`,
+      });
+    }
+  }
+
   async updateInventoryStock(req: Request, res: Response, _next: NextFunction) {
     try {
       const variantId = getPositiveInteger(req.params.variantId);
@@ -597,8 +737,8 @@ export class AdminController {
       const { page, limit, skip, take } = parsePagination(req.query);
       const [brands, totalItems] = await Promise.all([
         prisma.brand.findMany({
-          skip,
-          take,
+          // skip,
+          // take,
           orderBy: {
             name: "asc",
           },
@@ -627,13 +767,61 @@ export class AdminController {
     }
   }
 
+  async createBrand(req: Request, res: Response, _next: NextFunction) {
+    try {
+      const { name, description, logoUrl } = req.body;
+
+      const existingBrand = await prisma.brand.findUnique({
+        where: {
+          name,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (existingBrand) {
+        return res.status(409).json({
+          success: false,
+          message: "Brand already exists.",
+        });
+      }
+
+      const brand = await prisma.brand.create({
+        data: {
+          name,
+          description,
+          logoUrl,
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          logoUrl: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: brand,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Unable to create brand: ${getErrorMessage(error)}`,
+      });
+    }
+  }
+
   async getCategories(req: Request, res: Response, _next: NextFunction) {
     try {
       const { page, limit, skip, take } = parsePagination(req.query);
       const [categories, totalItems] = await Promise.all([
         prisma.category.findMany({
-          skip,
-          take,
+          // skip,
+          // take,
           orderBy: [{ parentId: "asc" }, { name: "asc" }],
           select: {
             id: true,
@@ -653,6 +841,81 @@ export class AdminController {
       return res.status(500).json({
         success: false,
         message: `Unable to load category list: ${getErrorMessage(error)}`,
+      });
+    }
+  }
+
+  async createCategory(req: Request, res: Response, _next: NextFunction) {
+    try {
+      const { name, parentId } = req.body;
+
+      const normalizedName = name?.trim();
+
+      if (!normalizedName) {
+        return res.status(400).json({
+          success: false,
+          message: "Category name is required.",
+        });
+      }
+
+      if (parentId) {
+        const parentCategory = await prisma.category.findUnique({
+          where: {
+            id: parentId,
+          },
+          select: {
+            id: true,
+          },
+        });
+
+        if (!parentCategory) {
+          return res.status(404).json({
+            success: false,
+            message: "Parent category not found.",
+          });
+        }
+      }
+
+      const existingCategory = await prisma.category.findFirst({
+        where: {
+          name: {
+            equals: normalizedName,
+            mode: "insensitive",
+          },
+          parentId: parentId ?? null,
+        },
+        select: {
+          id: true,
+        },
+      });
+
+      if (existingCategory) {
+        return res.status(409).json({
+          success: false,
+          message: "Category already exists.",
+        });
+      }
+
+      const category = await prisma.category.create({
+        data: {
+          name: normalizedName,
+          parentId: parentId ?? null,
+        },
+        select: {
+          id: true,
+          name: true,
+          parentId: true,
+        },
+      });
+
+      return res.status(201).json({
+        success: true,
+        data: category,
+      });
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: `Unable to create category: ${getErrorMessage(error)}`,
       });
     }
   }

@@ -14,9 +14,12 @@ router.patch("/users/:userId/toggle-status", adminController.toggleUserStatus.bi
 router.get("/orders", adminController.getOrders.bind(adminController));
 router.put("/orders/:id/status", adminController.updateOrderStatus.bind(adminController));
 router.get("/products", adminController.getInventory.bind(adminController));
+router.post("/products", adminController.createProduct.bind(adminController));
 router.put("/products/:variantId", adminController.updateInventoryStock.bind(adminController));
 router.get("/brands", adminController.getBrands.bind(adminController));
+router.post("/brands", adminController.createBrand.bind(adminController));
 router.get("/categories", adminController.getCategories.bind(adminController));
+router.post("/categories", adminController.createCategory.bind(adminController));
 router.get("/vouchers", adminController.getVouchers.bind(adminController));
 router.patch("/vouchers/:id/toggle", adminController.toggleVoucher.bind(adminController));
 router.put("/vouchers/:id/toggle", adminController.toggleVoucher.bind(adminController));

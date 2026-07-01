@@ -5,6 +5,7 @@ const router = Router();
 const orderController = new OrderController();
 router.get("/history", authenticateToken, orderController.getHistory.bind(orderController));
 router.post("/checkout", authenticateToken, orderController.checkout.bind(orderController));
+router.post("/create-payment-link/:orderId", authenticateToken, orderController.createPaymentLink.bind(orderController));
 router.put("/:id/complete", authenticateToken, orderController.completeOrder.bind(orderController));
 router.get("/:transactionRef", authenticateToken, orderController.getOrderByTransactionRef.bind(orderController));
 export default router;

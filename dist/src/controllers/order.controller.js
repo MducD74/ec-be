@@ -54,6 +54,35 @@ export class OrderController {
             return res.status(400).json({ message: getErrorMessage(error) });
         }
     }
+    async createPaymentLink(req, res, _next) {
+        try {
+            if (!req.user) {
+                return res.status(401).json({
+                    message: "Missing authenticated user",
+                });
+            }
+            const orderId = Number(req.params.orderId);
+            if (Number.isNaN(orderId)) {
+                return res.status(400).json({
+                    message: "Invalid order id",
+                });
+            }
+            const ipAddr = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ??
+                req.socket.remoteAddress ??
+                "127.0.0.1";
+            const result = await orderService.createPaymentLink({
+                orderId,
+                userId: req.user.userId,
+                ipAddr,
+            });
+            return res.status(200).json(result);
+        }
+        catch (error) {
+            return res.status(400).json({
+                message: getErrorMessage(error),
+            });
+        }
+    }
     async getHistory(req, res, next) {
         try {
             if (!req.user) {

@@ -312,6 +312,80 @@ export class OrderService {
     return { order };
   }
 
+  async createPaymentLink(input: {
+    orderId: number;
+    userId: number;
+    ipAddr: string;
+  }) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findFirst({
+        where: {
+          id: input.orderId,
+          userId: input.userId,
+        },
+      });
+
+      if (!order) {
+        throw new Error("Order not found");
+      }
+
+      if (order.paymentMethod !== "VNPAY") {
+        throw new Error("Order is not using VNPay");
+      }
+
+      if (order.paymentStatus !== "PENDING") {
+        throw new Error("Order has already been paid");
+      }
+
+      // Kiểm tra transaction còn hiệu lực
+      const latestTransaction = await tx.paymentTransaction.findFirst({
+        where: {
+          orderId: order.id,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      if (
+        latestTransaction &&
+        latestTransaction.status !== "PAID" && latestTransaction.expiredAt &&
+        latestTransaction.expiredAt > new Date()
+      ) {
+        return {
+          paymentUrl: latestTransaction.paymentUrl,
+        };
+      }
+
+      const transactionRef = this.buildTransactionRef(order.id);
+      const expiredAt = this.getPaymentExpiredAt();
+
+      const paymentUrl = vnPayService.createPaymentUrl({
+        orderId: transactionRef,
+        amount: order.total.toNumber(),
+        orderInfo: `Thanh toan don hang ${order.id}`,
+        ipAddr: input.ipAddr,
+      });
+
+      await paymentTransactionService.createTransaction(tx, {
+        orderId: order.id,
+        transactionRef,
+        amount: order.total,
+        paymentUrl,
+        expiredAt,
+      });
+
+      appLog.info("[Order] VNPay payment link recreated", {
+        orderId: order.id,
+        transactionRef,
+      });
+
+      return {
+        paymentUrl,
+      };
+    });
+  }
+
   async getHistory(input: OrderHistoryInput) {
     const skip = (input.page - 1) * input.limit;
     const where = {
